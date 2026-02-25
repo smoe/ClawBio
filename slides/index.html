@@ -103,6 +103,13 @@ code { font-family: 'SF Mono', 'Fira Code', monospace; }
     color: #484f58; z-index: 100;
 }
 
+/* ===== SLIDE LOGO (bottom-left on every slide) ===== */
+.slide-logo {
+    position: fixed; bottom: 10px; left: 16px; z-index: 100;
+    width: 28px; height: 28px; opacity: 0.5;
+    border-radius: 6px;
+}
+
 /* ===== SPEAKER NOTES (hidden, for reference) ===== */
 .notes { display: none; }
 
@@ -896,6 +903,9 @@ Scorer   Reporter   Annotator  Synthesizer Orchestrator</span>
 </section>
 
 </div><!-- /deck -->
+
+<!-- ===== SLIDE LOGO ===== -->
+<img class="slide-logo" src="../img/favicon-48.png" alt="ClawBio">
 
 <!-- ===== PROGRESS BAR ===== -->
 <div class="progress" id="progress"></div>
