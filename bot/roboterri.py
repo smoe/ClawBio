@@ -2,12 +2,15 @@
 """
 roboterri.py — RoboTerri ClawBio Telegram Bot
 ==============================================
-A Telegram bot that runs ClawBio bioinformatics skills using Claude
+A Telegram bot that runs ClawBio bioinformatics skills using any LLM
 as the reasoning engine. Handles text messages, genetic file uploads,
 and medication photos.
 
+Works with any OpenAI-compatible provider: OpenAI, Anthropic (via proxy),
+Google, Mistral, Groq, Together, OpenRouter, Ollama, LM Studio, etc.
+
 Prerequisites:
-    pip3 install python-telegram-bot[job-queue] anthropic python-dotenv
+    pip3 install python-telegram-bot[job-queue] openai python-dotenv
 
 Usage:
     # Set environment variables in .env (see bot/README.md)
@@ -26,8 +29,8 @@ import time
 from datetime import datetime
 from pathlib import Path
 
-import anthropic
 from dotenv import load_dotenv
+from openai import AsyncOpenAI, APIError
 from telegram import Update
 from telegram.ext import (
     Application,
@@ -45,9 +48,9 @@ load_dotenv()
 
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_CHAT_ID = int(os.environ.get("TELEGRAM_CHAT_ID", "0"))
-LLM_API_KEY = os.environ.get("LLM_API_KEY") or os.environ.get("ANTHROPIC_API_KEY", "")
-LLM_BASE_URL = os.environ.get("LLM_BASE_URL", "")  # e.g. https://openrouter.ai/api/v1
-CLAWBIO_MODEL = os.environ.get("CLAWBIO_MODEL", "claude-sonnet-4-5-20250929")
+LLM_API_KEY = os.environ.get("LLM_API_KEY", "")
+LLM_BASE_URL = os.environ.get("LLM_BASE_URL", "")
+CLAWBIO_MODEL = os.environ.get("CLAWBIO_MODEL", "gpt-4o")
 
 if not TELEGRAM_BOT_TOKEN:
     print("Error: TELEGRAM_BOT_TOKEN not set. See bot/README.md for setup.")
@@ -101,7 +104,8 @@ SYSTEM_PROMPT = f"{_soul}\n\n{ROLE_GUARDRAILS}"
 _client_kwargs = {"api_key": LLM_API_KEY}
 if LLM_BASE_URL:
     _client_kwargs["base_url"] = LLM_BASE_URL
-claude = anthropic.AsyncAnthropic(**_client_kwargs)
+llm = AsyncOpenAI(**_client_kwargs)
+
 conversations: dict[int, list] = {}
 MAX_HISTORY = 20
 
@@ -117,79 +121,82 @@ _pending_text: list[str] = []
 BOT_START_TIME = time.time()
 
 # --------------------------------------------------------------------------- #
-# Tool definition (clawbio only)
+# Tool definition (OpenAI function-calling format)
 # --------------------------------------------------------------------------- #
 
 TOOLS = [
     {
-        "name": "clawbio",
-        "description": (
-            "Run a ClawBio bioinformatics skill. Available skills: "
-            "pharmgx (pharmacogenomics report from 23andMe/AncestryDNA data), "
-            "equity (HEIM equity score from VCF or ancestry CSV), "
-            "nutrigx (nutrigenomics dietary advice from genetic data), "
-            "metagenomics (metagenomic profiling from FASTQ), "
-            "compare (genome comparison: IBS vs George Church + ancestry estimation), "
-            "drugphoto (identify a drug from a photo and get personalised dosage guidance "
-            "using demo genotype data -- always use mode='demo'). "
-            "Use mode='demo' to run with built-in demo data. "
-            "Use mode='file' when the user has sent a genetic data file. "
-            "Use skill='auto' to let the orchestrator detect the right skill. "
-            "IMPORTANT: When this tool returns results, relay the output VERBATIM. "
-            "Do not paraphrase, summarise, or rewrite. The output contains exact numerical "
-            "results (IBS scores, percentages, gene-drug interactions) that must be shown unchanged."
-        ),
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "skill": {
-                    "type": "string",
-                    "enum": ["pharmgx", "equity", "nutrigx", "metagenomics",
-                             "compare", "drugphoto", "auto"],
-                    "description": (
-                        "Which bioinformatics skill to run. Use 'auto' to let "
-                        "the orchestrator detect from the file type or query."
-                    ),
+        "type": "function",
+        "function": {
+            "name": "clawbio",
+            "description": (
+                "Run a ClawBio bioinformatics skill. Available skills: "
+                "pharmgx (pharmacogenomics report from 23andMe/AncestryDNA data), "
+                "equity (HEIM equity score from VCF or ancestry CSV), "
+                "nutrigx (nutrigenomics dietary advice from genetic data), "
+                "metagenomics (metagenomic profiling from FASTQ), "
+                "compare (genome comparison: IBS vs George Church + ancestry estimation), "
+                "drugphoto (identify a drug from a photo and get personalised dosage guidance "
+                "using demo genotype data -- always use mode='demo'). "
+                "Use mode='demo' to run with built-in demo data. "
+                "Use mode='file' when the user has sent a genetic data file. "
+                "Use skill='auto' to let the orchestrator detect the right skill. "
+                "IMPORTANT: When this tool returns results, relay the output VERBATIM. "
+                "Do not paraphrase, summarise, or rewrite. The output contains exact numerical "
+                "results (IBS scores, percentages, gene-drug interactions) that must be shown unchanged."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "skill": {
+                        "type": "string",
+                        "enum": ["pharmgx", "equity", "nutrigx", "metagenomics",
+                                 "compare", "drugphoto", "auto"],
+                        "description": (
+                            "Which bioinformatics skill to run. Use 'auto' to let "
+                            "the orchestrator detect from the file type or query."
+                        ),
+                    },
+                    "mode": {
+                        "type": "string",
+                        "enum": ["file", "demo"],
+                        "description": (
+                            "file: use a file the user sent via Telegram. "
+                            "demo: run with built-in demo/synthetic data."
+                        ),
+                    },
+                    "query": {
+                        "type": "string",
+                        "description": (
+                            "Natural language query for auto-routing via the "
+                            "orchestrator (only used when skill='auto' and no file)."
+                        ),
+                    },
+                    "extra_args": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": (
+                            "Additional CLI arguments for power users "
+                            "(e.g. ['--weights', '0.4,0.3,0.15,0.15'])."
+                        ),
+                    },
+                    "drug_name": {
+                        "type": "string",
+                        "description": (
+                            "Drug name identified from a photo (brand or generic, "
+                            "e.g. 'Plavix' or 'clopidogrel'). Required when skill='drugphoto'."
+                        ),
+                    },
+                    "visible_dose": {
+                        "type": "string",
+                        "description": (
+                            "Dosage visible on the packaging (e.g. '50mg', '75mg'). "
+                            "Optional -- enriches the recommendation."
+                        ),
+                    },
                 },
-                "mode": {
-                    "type": "string",
-                    "enum": ["file", "demo"],
-                    "description": (
-                        "file: use a file the user sent via Telegram. "
-                        "demo: run with built-in demo/synthetic data."
-                    ),
-                },
-                "query": {
-                    "type": "string",
-                    "description": (
-                        "Natural language query for auto-routing via the "
-                        "orchestrator (only used when skill='auto' and no file)."
-                    ),
-                },
-                "extra_args": {
-                    "type": "array",
-                    "items": {"type": "string"},
-                    "description": (
-                        "Additional CLI arguments for power users "
-                        "(e.g. ['--weights', '0.4,0.3,0.15,0.15'])."
-                    ),
-                },
-                "drug_name": {
-                    "type": "string",
-                    "description": (
-                        "Drug name identified from a photo (brand or generic, "
-                        "e.g. 'Plavix' or 'clopidogrel'). Required when skill='drugphoto'."
-                    ),
-                },
-                "visible_dose": {
-                    "type": "string",
-                    "description": (
-                        "Dosage visible on the packaging (e.g. '50mg', '75mg'). "
-                        "Optional -- enriches the recommendation."
-                    ),
-                },
+                "required": ["skill", "mode"],
             },
-            "required": ["skill", "mode"],
         },
     },
 ]
@@ -403,7 +410,7 @@ async def _drain_pending_media(update: Update, context) -> None:
 
 
 # --------------------------------------------------------------------------- #
-# LLM tool loop
+# LLM tool loop (OpenAI-compatible chat completions + function calling)
 # --------------------------------------------------------------------------- #
 
 TOOL_EXECUTORS = {
@@ -415,62 +422,96 @@ MAX_TOOL_ITERATIONS = 10
 
 async def llm_tool_loop(chat_id: int, user_content: str | list) -> str:
     """
-    Run the Claude tool-use loop:
+    Run the LLM tool-use loop (OpenAI chat completions format):
     1. Append user message to history
-    2. Call Claude with system_prompt + history + tools
-    3. If tool_use blocks -> execute -> append results -> call again
+    2. Call LLM with system prompt + history + tools
+    3. If tool_calls -> execute -> append results -> call again
     4. Return final text
     """
     history = conversations.setdefault(chat_id, [])
-    history.append({"role": "user", "content": user_content})
+
+    # Build user message in OpenAI format
+    if isinstance(user_content, str):
+        history.append({"role": "user", "content": user_content})
+    else:
+        # Multimodal content blocks — convert to OpenAI format
+        oai_parts = []
+        for block in user_content:
+            if block.get("type") == "text":
+                oai_parts.append({"type": "text", "text": block["text"]})
+            elif block.get("type") == "image":
+                src = block.get("source", {})
+                data_uri = f"data:{src['media_type']};base64,{src['data']}"
+                oai_parts.append({
+                    "type": "image_url",
+                    "image_url": {"url": data_uri},
+                })
+        history.append({"role": "user", "content": oai_parts})
 
     if len(history) > MAX_HISTORY:
         history[:] = history[-MAX_HISTORY:]
 
-    assistant_content = []
+    last_message = None
     for _iteration in range(MAX_TOOL_ITERATIONS):
         try:
-            response = await claude.messages.create(
+            response = await llm.chat.completions.create(
                 model=CLAWBIO_MODEL,
                 max_tokens=8192,
-                system=SYSTEM_PROMPT,
-                messages=history,
+                messages=[{"role": "system", "content": SYSTEM_PROMPT}] + history,
                 tools=TOOLS,
             )
-        except anthropic.APIError as e:
-            logger.error(f"Claude API error: {e}")
+        except APIError as e:
+            logger.error(f"LLM API error: {e}")
             return f"Sorry, I'm having trouble thinking right now -- API error: {e}"
 
-        assistant_content = response.content
-        history.append({"role": "assistant", "content": assistant_content})
+        choice = response.choices[0]
+        last_message = choice.message
 
-        tool_blocks = [b for b in assistant_content if b.type == "tool_use"]
-        if not tool_blocks:
-            text_parts = [b.text for b in assistant_content if b.type == "text"]
-            return "\n".join(text_parts) if text_parts else "(no response)"
+        # Append assistant message to history
+        assistant_msg = {"role": "assistant", "content": last_message.content or ""}
+        if last_message.tool_calls:
+            assistant_msg["tool_calls"] = [
+                {
+                    "id": tc.id,
+                    "type": "function",
+                    "function": {
+                        "name": tc.function.name,
+                        "arguments": tc.function.arguments,
+                    },
+                }
+                for tc in last_message.tool_calls
+            ]
+        history.append(assistant_msg)
 
-        tool_results = []
-        for block in tool_blocks:
-            executor = TOOL_EXECUTORS.get(block.name)
+        # No tool calls — return text
+        if not last_message.tool_calls:
+            return last_message.content or "(no response)"
+
+        # Execute tool calls and append results
+        for tc in last_message.tool_calls:
+            func_name = tc.function.name
+            executor = TOOL_EXECUTORS.get(func_name)
             if executor:
-                logger.info(f"Tool call: {block.name}({json.dumps(block.input)[:200]})")
                 try:
-                    result = await executor(block.input)
+                    args = json.loads(tc.function.arguments)
+                except json.JSONDecodeError:
+                    args = {}
+                logger.info(f"Tool call: {func_name}({json.dumps(args)[:200]})")
+                try:
+                    result = await executor(args)
                 except Exception as tool_err:
-                    logger.error(f"Tool {block.name} raised: {tool_err}", exc_info=True)
-                    result = f"Error executing {block.name}: {type(tool_err).__name__}: {tool_err}"
+                    logger.error(f"Tool {func_name} raised: {tool_err}", exc_info=True)
+                    result = f"Error executing {func_name}: {type(tool_err).__name__}: {tool_err}"
             else:
-                result = f"Unknown tool: {block.name}"
-            tool_results.append({
-                "type": "tool_result",
-                "tool_use_id": block.id,
+                result = f"Unknown tool: {func_name}"
+
+            history.append({
+                "role": "tool",
+                "tool_call_id": tc.id,
                 "content": result,
             })
 
-        history.append({"role": "user", "content": tool_results})
-
-    text_parts = [b.text for b in assistant_content if b.type == "text"]
-    return "\n".join(text_parts) if text_parts else "(max tool iterations reached)"
+    return last_message.content if last_message and last_message.content else "(max tool iterations reached)"
 
 
 # --------------------------------------------------------------------------- #
@@ -628,7 +669,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle photos: download -> base64 -> Claude vision (drug detection)."""
+    """Handle photos: download -> base64 -> LLM vision (drug detection)."""
     if not is_authorised(update):
         return
     if not update.message:
@@ -669,6 +710,7 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         }
 
         caption = update.message.caption or ""
+        # Use internal format; llm_tool_loop converts to OpenAI image_url format
         content_blocks = [
             {
                 "type": "image",
