@@ -64,6 +64,7 @@ KEYWORD_MAP: dict[str, str] = {
     "nextflow": "repro-enforcer",
     "singularity": "repro-enforcer",
     "conda": "repro-enforcer",
+    "labstep": "labstep",
     "compare": "genome-compare",
     "corpasome": "genome-compare",
     "ibs": "genome-compare",
