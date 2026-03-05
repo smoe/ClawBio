@@ -33,7 +33,7 @@ Snap a photo of a medication in Telegram. ClawBio identifies the drug from the p
 > **Warfarin** | CYP2C9 \*1/\*2 Intermediate · VKORC1 High Sensitivity
 > **AVOID — DO NOT USE** · Standard dose causes over-anticoagulation in this genotype.
 
-Or take any genetic variant (identified by its rsID — a unique label like rs9923231) and search nine genomic databases at once to find every known disease association, tissue-specific effect, and population frequency. Or estimate your genetic predisposition to conditions like type 2 diabetes by combining thousands of small-effect variants into a single polygenic risk score. Or explore the UK Biobank — a half-million-person research dataset — by asking in plain English what fields measure blood pressure, grip strength, or depression, and get back the exact field IDs, descriptions, and linked publications you need.
+Or take any genetic variant (identified by its rsID — a unique label like rs9923231) and search nine genomic databases at once to find every known disease association, tissue-specific effect, and population frequency. Or estimate your genetic predisposition to conditions like type 2 diabetes by combining thousands of small-effect variants into a single polygenic risk score. Or explore the [UK Biobank](https://www.ukbiobank.ac.uk/) — a half-million-person research dataset — by asking in plain English what fields measure blood pressure, grip strength, or depression, and get back the exact field IDs, descriptions, and linked publications you need.
 
 Every result ships with a reproducibility bundle: `commands.sh`, `environment.yml`, and SHA-256 checksums. A reviewer can reproduce your Figure 3 in 30 seconds without emailing you.
 
