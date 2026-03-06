@@ -1,0 +1,635 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ClawBio — Investor Pitch Deck</title>
+<meta name="description" content="ClawBio is where biological AI gets its skills: a curated, reproducible, open repository any agent can call.">
+<meta property="og:title" content="ClawBio — Investor Pitch Deck">
+<meta property="og:description" content="ClawBio is where biological AI gets its skills: a curated, reproducible, open repository any agent can call.">
+<meta property="og:image" content="https://raw.githubusercontent.com/ClawBio/ClawBio/main/img/clawbio-social-preview.png">
+<meta property="og:url" content="https://clawbio.github.io/ClawBio/slides/pitch/">
+<meta property="og:type" content="website">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="ClawBio — Investor Pitch Deck">
+<meta name="twitter:description" content="ClawBio is where biological AI gets its skills: a curated, reproducible, open repository any agent can call.">
+<meta name="twitter:image" content="https://raw.githubusercontent.com/ClawBio/ClawBio/main/img/clawbio-social-preview.png">
+<link rel="icon" type="image/x-icon" href="../../img/favicon.ico">
+<link rel="icon" type="image/png" sizes="32x32" href="../../img/favicon-32.png">
+<link rel="apple-touch-icon" href="../../img/clawbio-logo.jpeg">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg:      #0d1117;
+  --bg2:     #161b22;
+  --bg3:     #21262d;
+  --border:  #30363d;
+  --text:    #e6edf3;
+  --muted:   #8b949e;
+  --green:   #3fb950;
+  --green2:  #56d364;
+  --blue:    #58a6ff;
+  --red:     #f85149;
+  --purple:  #bc8cff;
+}
+
+html, body {
+  height: 100%; width: 100%;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── PROGRESS BAR ── */
+#progress-bar {
+  position: fixed; top: 0; left: 0; height: 3px;
+  background: var(--green); transition: width 0.4s ease; z-index: 200;
+}
+
+/* ── SLIDE COUNTER ── */
+#counter {
+  position: fixed; bottom: 1.4rem; right: 1.8rem;
+  font-size: 0.8rem; color: var(--muted); z-index: 200;
+  letter-spacing: 0.05em;
+}
+
+/* ── NAV ARROWS ── */
+.nav-btn {
+  position: fixed; top: 50%; transform: translateY(-50%);
+  background: rgba(255,255,255,0.04); border: 1px solid var(--border);
+  color: var(--muted); width: 40px; height: 40px; border-radius: 50%;
+  cursor: pointer; font-size: 1.1rem; display: flex; align-items: center;
+  justify-content: center; transition: all 0.2s; z-index: 200;
+}
+.nav-btn:hover { background: rgba(255,255,255,0.1); color: var(--text); }
+#btn-prev { left: 1rem; }
+#btn-next { right: 1rem; }
+
+/* ── DECK ── */
+.deck { width: 100vw; height: 100vh; position: relative; }
+
+.slide {
+  position: absolute; inset: 0;
+  display: flex; flex-direction: column;
+  justify-content: center; align-items: center;
+  padding: 5vh 8vw;
+  opacity: 0; visibility: hidden;
+  transition: opacity 0.45s ease, transform 0.45s ease;
+  transform: translateX(30px);
+}
+.slide.active {
+  opacity: 1; visibility: visible; transform: translateX(0);
+}
+.slide.exit {
+  opacity: 0; transform: translateX(-30px);
+}
+
+/* ── SHARED TYPOGRAPHY ── */
+.label {
+  font-size: 0.72rem; font-weight: 700; letter-spacing: 0.12em;
+  text-transform: uppercase; color: var(--green);
+  margin-bottom: 0.6rem;
+}
+.title {
+  font-size: clamp(1.9rem, 3.5vw, 3rem); font-weight: 800;
+  line-height: 1.15; letter-spacing: -0.02em; text-align: center;
+  margin-bottom: 1rem;
+}
+.subtitle {
+  font-size: clamp(1rem, 1.8vw, 1.3rem); color: var(--muted);
+  text-align: center; max-width: 680px; line-height: 1.6;
+  margin-bottom: 2.5rem;
+}
+.em { color: var(--green); }
+
+/* ── SLIDE 0 — TITLE ── */
+.title-logo { font-size: 4rem; margin-bottom: 0.4rem; }
+.title-brand {
+  font-size: clamp(3rem, 6vw, 5rem); font-weight: 900;
+  letter-spacing: -0.03em; color: var(--text); margin-bottom: 0.5rem;
+}
+.title-tagline {
+  font-size: clamp(1.05rem, 1.9vw, 1.4rem); color: var(--muted);
+  max-width: 600px; text-align: center; line-height: 1.55;
+  margin-bottom: 2.5rem;
+}
+.title-tagline strong { color: var(--text); }
+.stats-row {
+  display: flex; gap: 3rem; flex-wrap: wrap; justify-content: center;
+}
+.stat { text-align: center; }
+.stat-num {
+  font-size: clamp(2rem, 3.5vw, 2.8rem); font-weight: 800;
+  color: var(--green); line-height: 1;
+}
+.stat-label {
+  font-size: 0.78rem; color: var(--muted); margin-top: 0.3rem;
+  text-transform: uppercase; letter-spacing: 0.06em;
+}
+.title-github {
+  margin-top: 2rem; font-size: 0.85rem; color: var(--muted);
+  font-family: monospace;
+}
+
+/* ── SLIDE 1 — PROBLEM ── */
+.problem-grid {
+  display: grid; grid-template-columns: repeat(3, 1fr);
+  gap: 1.5rem; width: 100%; max-width: 960px; margin-top: 0.5rem;
+}
+.problem-card {
+  background: var(--bg2); border: 1px solid var(--border);
+  border-radius: 12px; padding: 1.6rem 1.4rem;
+  display: flex; flex-direction: column; gap: 0.6rem;
+}
+.problem-icon { font-size: 2rem; }
+.problem-heading {
+  font-size: 1rem; font-weight: 700; color: var(--text);
+}
+.problem-body {
+  font-size: 0.88rem; color: var(--muted); line-height: 1.6;
+}
+
+/* ── SLIDE 2 — SOLUTION ── */
+.code-pill {
+  background: var(--bg2); border: 1px solid var(--border);
+  border-radius: 8px; padding: 0.7rem 1.4rem;
+  font-family: 'Fira Code', 'Cascadia Code', monospace;
+  font-size: clamp(0.78rem, 1.2vw, 1rem); color: var(--blue);
+  margin-bottom: 2rem; white-space: nowrap; overflow-x: auto;
+  max-width: 100%;
+}
+.solution-grid {
+  display: grid; grid-template-columns: repeat(3, 1fr);
+  gap: 1.5rem; width: 100%; max-width: 900px;
+}
+.solution-card {
+  background: var(--bg2); border: 1px solid var(--border);
+  border-radius: 12px; padding: 1.5rem 1.3rem; text-align: center;
+}
+.solution-icon { font-size: 2.2rem; margin-bottom: 0.7rem; }
+.solution-heading { font-size: 1.05rem; font-weight: 700; margin-bottom: 0.5rem; }
+.solution-body { font-size: 0.85rem; color: var(--muted); line-height: 1.6; }
+
+/* ── SLIDE 3 — PRODUCT ── */
+.product-grid {
+  display: grid; grid-template-columns: repeat(3, 1fr);
+  gap: 1.5rem; width: 100%; max-width: 960px; margin-top: 0.5rem;
+}
+.product-card {
+  background: var(--bg2); border: 1px solid var(--border);
+  border-radius: 12px; padding: 1.5rem 1.3rem;
+  display: flex; flex-direction: column; gap: 0.5rem;
+}
+.product-tag {
+  font-size: 0.65rem; font-weight: 700; letter-spacing: 0.1em;
+  text-transform: uppercase; color: var(--green);
+}
+.product-name { font-size: 1.1rem; font-weight: 700; }
+.product-desc { font-size: 0.84rem; color: var(--muted); line-height: 1.6; flex: 1; }
+.product-cmd {
+  font-family: monospace; font-size: 0.75rem; color: var(--blue);
+  background: var(--bg3); padding: 0.3rem 0.6rem; border-radius: 5px;
+  margin-top: 0.3rem; white-space: nowrap; overflow-x: auto;
+}
+
+/* ── SLIDE 4 — TRACTION ── */
+.traction-grid {
+  display: grid; grid-template-columns: repeat(4, 1fr);
+  gap: 1.5rem; width: 100%; max-width: 900px; margin-bottom: 2rem;
+}
+.traction-card {
+  background: var(--bg2); border: 1px solid var(--border);
+  border-radius: 12px; padding: 1.4rem 1rem; text-align: center;
+}
+.traction-num {
+  font-size: clamp(2.4rem, 4vw, 3.5rem); font-weight: 900;
+  color: var(--green); line-height: 1;
+}
+.traction-label {
+  font-size: 0.82rem; font-weight: 700; color: var(--text);
+  margin: 0.4rem 0 0.2rem;
+}
+.traction-sub { font-size: 0.75rem; color: var(--muted); }
+.quote-block {
+  background: var(--bg2); border-left: 3px solid var(--green);
+  border-radius: 0 8px 8px 0; padding: 1rem 1.4rem;
+  max-width: 700px; text-align: left;
+}
+.quote-text { font-size: 1rem; font-style: italic; color: var(--text); margin-bottom: 0.4rem; }
+.quote-attr { font-size: 0.78rem; color: var(--muted); }
+
+/* ── SLIDE 5 — MARKET ── */
+.market-grid {
+  display: grid; grid-template-columns: repeat(3, 1fr);
+  gap: 1.5rem; width: 100%; max-width: 800px; margin-bottom: 2rem;
+}
+.market-card {
+  background: var(--bg2); border: 1px solid var(--border);
+  border-radius: 12px; padding: 1.5rem; text-align: center;
+}
+.market-type {
+  font-size: 0.7rem; font-weight: 700; letter-spacing: 0.12em;
+  text-transform: uppercase; color: var(--muted); margin-bottom: 0.4rem;
+}
+.market-label { font-size: 0.85rem; color: var(--muted); margin-bottom: 0.6rem; }
+.market-num {
+  font-size: clamp(2rem, 3.5vw, 2.8rem); font-weight: 900; color: var(--green);
+}
+.beachhead-box {
+  background: var(--bg2); border: 1px solid var(--border);
+  border-radius: 12px; padding: 1.2rem 1.6rem;
+  max-width: 800px; text-align: left;
+}
+.beachhead-label {
+  font-size: 0.72rem; font-weight: 700; letter-spacing: 0.1em;
+  text-transform: uppercase; color: var(--green); margin-bottom: 0.5rem;
+}
+.beachhead-text { font-size: 0.9rem; color: var(--muted); line-height: 1.6; }
+
+/* ── SLIDE 6 — BUSINESS MODEL ── */
+.biz-grid {
+  display: grid; grid-template-columns: repeat(3, 1fr);
+  gap: 1.5rem; width: 100%; max-width: 960px; margin-top: 0.5rem;
+}
+.biz-card {
+  background: var(--bg2); border: 1px solid var(--border);
+  border-radius: 12px; padding: 1.5rem 1.3rem;
+}
+.biz-num {
+  font-size: 0.7rem; color: var(--muted); letter-spacing: 0.1em;
+  text-transform: uppercase; margin-bottom: 0.5rem;
+}
+.biz-name { font-size: 1.15rem; font-weight: 700; margin-bottom: 0.3rem; }
+.biz-type {
+  font-size: 0.75rem; font-weight: 700; color: var(--green);
+  text-transform: uppercase; letter-spacing: 0.07em; margin-bottom: 0.8rem;
+}
+.biz-list { list-style: none; }
+.biz-list li {
+  font-size: 0.85rem; color: var(--muted); padding: 0.25rem 0;
+  border-bottom: 1px solid var(--border); display: flex; gap: 0.5rem;
+  align-items: flex-start;
+}
+.biz-list li:last-child { border-bottom: none; }
+.biz-list li::before { content: "→"; color: var(--blue); flex-shrink: 0; }
+
+/* ── SLIDE 7 — TEAM ── */
+.team-grid {
+  display: grid; grid-template-columns: repeat(3, 1fr);
+  gap: 2rem; width: 100%; max-width: 900px; margin-top: 0.5rem;
+}
+.team-card {
+  background: var(--bg2); border: 1px solid var(--border);
+  border-radius: 12px; padding: 1.6rem 1.4rem; text-align: center;
+}
+.team-avatar {
+  width: 56px; height: 56px; border-radius: 50%;
+  background: var(--bg3); border: 2px solid var(--green);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1.1rem; font-weight: 800; color: var(--green);
+  margin: 0 auto 1rem;
+}
+.team-name { font-size: 1.05rem; font-weight: 700; margin-bottom: 0.2rem; }
+.team-role { font-size: 0.78rem; color: var(--green); font-weight: 600; margin-bottom: 0.6rem; text-transform: uppercase; letter-spacing: 0.05em; }
+.team-bio { font-size: 0.83rem; color: var(--muted); line-height: 1.6; }
+
+/* ── SLIDE 8 — ASK ── */
+.ask-grid {
+  display: grid; grid-template-columns: repeat(3, 1fr);
+  gap: 1.5rem; width: 100%; max-width: 900px; margin-bottom: 2rem;
+}
+.ask-card {
+  background: var(--bg2); border: 1px solid var(--border);
+  border-radius: 12px; padding: 1.5rem 1.3rem;
+}
+.ask-num {
+  font-size: 0.7rem; color: var(--muted); letter-spacing: 0.1em;
+  text-transform: uppercase; margin-bottom: 0.5rem;
+}
+.ask-milestone { font-size: 1.05rem; font-weight: 700; margin-bottom: 0.5rem; }
+.ask-desc { font-size: 0.85rem; color: var(--muted); line-height: 1.6; margin-bottom: 0.8rem; }
+.ask-pct {
+  font-size: 0.82rem; font-weight: 700; color: var(--green);
+  background: rgba(63,185,80,0.12); border: 1px solid rgba(63,185,80,0.3);
+  padding: 0.25rem 0.6rem; border-radius: 999px; display: inline-block;
+}
+.ask-closing {
+  font-size: clamp(1.1rem, 2vw, 1.5rem); font-weight: 700;
+  color: var(--green); text-align: center;
+}
+
+/* ── RESPONSIVE ── */
+@media (max-width: 768px) {
+  .problem-grid, .solution-grid, .product-grid,
+  .biz-grid, .team-grid, .ask-grid { grid-template-columns: 1fr; overflow-y: auto; max-height: 70vh; }
+  .traction-grid, .market-grid { grid-template-columns: repeat(2, 1fr); }
+  .slide { padding: 3vh 5vw; justify-content: flex-start; padding-top: 4vh; overflow-y: auto; }
+}
+
+/* ── KEYBOARD HINT ── */
+#hint {
+  position: fixed; bottom: 1.4rem; left: 50%; transform: translateX(-50%);
+  font-size: 0.72rem; color: var(--muted); z-index: 200;
+  opacity: 1; transition: opacity 1s ease;
+}
+#hint.hidden { opacity: 0; pointer-events: none; }
+</style>
+</head>
+<body>
+
+<div id="progress-bar"></div>
+<div id="counter">1 / 9</div>
+<div id="hint">← → arrow keys or click to navigate</div>
+
+<button class="nav-btn" id="btn-prev" aria-label="Previous slide">&#8592;</button>
+<button class="nav-btn" id="btn-next" aria-label="Next slide">&#8594;</button>
+
+<div class="deck" id="deck">
+
+  <!-- SLIDE 0: TITLE -->
+  <div class="slide active" id="slide-0">
+    <div class="title-logo">&#129430;</div>
+    <div class="title-brand">ClawBio</div>
+    <p class="title-tagline">
+      ClawBio is where biological AI gets its skills:<br>
+      <strong>a curated, reproducible, open repository any agent can call.</strong>
+    </p>
+    <div class="stats-row">
+      <div class="stat"><div class="stat-num">139</div><div class="stat-label">GitHub Stars</div></div>
+      <div class="stat"><div class="stat-num">23</div><div class="stat-label">Forks</div></div>
+      <div class="stat"><div class="stat-num">21</div><div class="stat-label">Skills</div></div>
+      <div class="stat"><div class="stat-num">7</div><div class="stat-label">Days Old</div></div>
+    </div>
+    <div class="title-github">github.com/ClawBio/ClawBio</div>
+  </div>
+
+  <!-- SLIDE 1: PROBLEM -->
+  <div class="slide" id="slide-1">
+    <div class="label">The Problem</div>
+    <h2 class="title">Biological research is <span class="em">irreproducible</span> by design</h2>
+    <div class="problem-grid">
+      <div class="problem-card">
+        <div class="problem-icon">&#128196;</div>
+        <div class="problem-heading">Methods sections are not code</div>
+        <div class="problem-body">Published papers describe pipelines in prose. Reproducing them means reverse-engineering intent from text.</div>
+      </div>
+      <div class="problem-card">
+        <div class="problem-icon">&#128279;</div>
+        <div class="problem-heading">Dependency hell is universal</div>
+        <div class="problem-body">Custom scripts, undocumented environments, conflicting library versions. Researchers spend weeks on setup, not science.</div>
+      </div>
+      <div class="problem-card">
+        <div class="problem-icon">&#129302;</div>
+        <div class="problem-heading">AI agents cannot call biology</div>
+        <div class="problem-body">No machine-readable catalog of biological methods exists. Agents cannot discover, install, or run published methods.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SLIDE 2: SOLUTION -->
+  <div class="slide" id="slide-2">
+    <div class="label">The Solution</div>
+    <h2 class="title">The paper ships <span class="em">as the skill</span></h2>
+    <div class="code-pill">$ openclaw install pharmgx-reporter &amp;&amp; openclaw run pharmgx-reporter</div>
+    <div class="solution-grid">
+      <div class="solution-card">
+        <div class="solution-icon">&#128230;</div>
+        <div class="solution-heading">Install</div>
+        <div class="solution-body">One command. Dependencies resolved automatically. Runs locally, no cloud required.</div>
+      </div>
+      <div class="solution-card">
+        <div class="solution-icon">&#128300;</div>
+        <div class="solution-heading">Reproducible</div>
+        <div class="solution-body">Every skill is pinned to the exact method from the published paper. Same input, same output, every time.</div>
+      </div>
+      <div class="solution-card">
+        <div class="solution-icon">&#129302;</div>
+        <div class="solution-heading">Agent-Native</div>
+        <div class="solution-body">llms.txt + AGENTS.md + catalog.json. Any AI agent can discover, call, and contribute skills.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SLIDE 3: PRODUCT -->
+  <div class="slide" id="slide-3">
+    <div class="label">Product</div>
+    <h2 class="title">21 skills. <span class="em">Three flagship use cases.</span></h2>
+    <div class="product-grid">
+      <div class="product-card">
+        <div class="product-tag">Clinical Wedge</div>
+        <div class="product-name">&#128138; PharmGx Reporter</div>
+        <div class="product-desc">Pharmacogenomics reports from consumer genetic test data (23andMe, AncestryDNA). Clinical actionability from data patients already own.</div>
+        <div class="product-cmd">openclaw install pharmgx-reporter</div>
+      </div>
+      <div class="product-card">
+        <div class="product-tag">Research Tool</div>
+        <div class="product-name">&#9878;&#65039; Equity Scorer</div>
+        <div class="product-desc">Computes HEIM scores to quantify population representation gaps in biobank research. Built on published health equity methodology.</div>
+        <div class="product-cmd">openclaw install equity-scorer</div>
+      </div>
+      <div class="product-card">
+        <div class="product-tag">Agent Routing</div>
+        <div class="product-name">&#129516; Bio Orchestrator</div>
+        <div class="product-desc">Routing layer that directs queries to the appropriate bio skill. The entry point for multi-skill agentic workflows.</div>
+        <div class="product-cmd">openclaw install bio-orchestrator</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SLIDE 4: TRACTION -->
+  <div class="slide" id="slide-4">
+    <div class="label">Traction</div>
+    <h2 class="title">Organic. <span class="em">No marketing.</span> One week.</h2>
+    <div class="traction-grid">
+      <div class="traction-card">
+        <div class="traction-num">139</div>
+        <div class="traction-label">GitHub Stars</div>
+        <div class="traction-sub">bioinformatics community, organic</div>
+      </div>
+      <div class="traction-card">
+        <div class="traction-num">23</div>
+        <div class="traction-label">Forks</div>
+        <div class="traction-sub">people building on ClawBio</div>
+      </div>
+      <div class="traction-card">
+        <div class="traction-num">3</div>
+        <div class="traction-label">Releases</div>
+        <div class="traction-sub">v0.1 to v0.3.1 in 7 days</div>
+      </div>
+      <div class="traction-card">
+        <div class="traction-num">1</div>
+        <div class="traction-label">External PR</div>
+        <div class="traction-sub">first outside contributor</div>
+      </div>
+    </div>
+    <div class="quote-block">
+      <div class="quote-text">"This is what the bioinformatics community has been waiting for."</div>
+      <div class="quote-attr">GitHub Discussions, Day 3</div>
+    </div>
+  </div>
+
+  <!-- SLIDE 5: MARKET -->
+  <div class="slide" id="slide-5">
+    <div class="label">Market</div>
+    <h2 class="title">Large market. <span class="em">Real wedge.</span> Documented gap.</h2>
+    <div class="market-grid">
+      <div class="market-card">
+        <div class="market-type">TAM</div>
+        <div class="market-label">Global Genomics Market</div>
+        <div class="market-num">$35B</div>
+      </div>
+      <div class="market-card">
+        <div class="market-type">SAM</div>
+        <div class="market-label">Clinical Bioinformatics Tools</div>
+        <div class="market-num">$8B</div>
+      </div>
+      <div class="market-card">
+        <div class="market-type">SOM</div>
+        <div class="market-label">PGx Implementation + Reproducibility Tools</div>
+        <div class="market-num">$3B</div>
+      </div>
+    </div>
+    <div class="beachhead-box">
+      <div class="beachhead-label">Beachhead</div>
+      <div class="beachhead-text">Clinical genetics labs and genetic counsellors running PGx from consumer test data. Every academic medical centre is a potential customer. We start with PGx, expand to every published method in biology.</div>
+    </div>
+  </div>
+
+  <!-- SLIDE 6: BUSINESS MODEL -->
+  <div class="slide" id="slide-6">
+    <div class="label">Business Model</div>
+    <h2 class="title">Open core. <span class="em">Paid ecosystem.</span> Enterprise layer.</h2>
+    <div class="biz-grid">
+      <div class="biz-card">
+        <div class="biz-num">01</div>
+        <div class="biz-name">Open Core</div>
+        <div class="biz-type">Free</div>
+        <ul class="biz-list">
+          <li>ClawBio skill library</li>
+          <li>OpenClaw runtime</li>
+          <li>Community contributions</li>
+          <li>MIT licensed</li>
+        </ul>
+      </div>
+      <div class="biz-card">
+        <div class="biz-num">02</div>
+        <div class="biz-name">ClawHub Registry</div>
+        <div class="biz-type">Institutional SaaS</div>
+        <ul class="biz-list">
+          <li>Verified clinical skills</li>
+          <li>Audit trail + compliance</li>
+          <li>Priority support</li>
+          <li>Private skill hosting</li>
+        </ul>
+      </div>
+      <div class="biz-card">
+        <div class="biz-num">03</div>
+        <div class="biz-name">Skill Marketplace</div>
+        <div class="biz-type">Revenue Share</div>
+        <ul class="biz-list">
+          <li>Authors publish paid skills</li>
+          <li>ClawBio takes 20% cut</li>
+          <li>Aligns incentives with community</li>
+          <li>Scales without headcount</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- SLIDE 7: TEAM -->
+  <div class="slide" id="slide-7">
+    <div class="label">Team</div>
+    <h2 class="title">We have <span class="em">lived this problem.</span></h2>
+    <div class="team-grid">
+      <div class="team-card">
+        <div class="team-avatar">MC</div>
+        <div class="team-name">Manuel Corpas</div>
+        <div class="team-role">Founder</div>
+        <div class="team-bio">Bioinformatics researcher and developer. Alan Turing Institute Fellow. Senior Lecturer at Westminster. Built ClawBio from lived experience of the reproducibility crisis.</div>
+      </div>
+      <div class="team-card">
+        <div class="team-avatar">DD</div>
+        <div class="team-name">David de Lorenzo</div>
+        <div class="team-role">Bioinformatics Developer</div>
+        <div class="team-bio">UCL researcher. Contributed the NutriGx Advisor skill. ClawBio's academic validator and bridge to clinical genomics institutions.</div>
+      </div>
+      <div class="team-card">
+        <div class="team-avatar">JM</div>
+        <div class="team-name">Jay Moore</div>
+        <div class="team-role">Bioinformatics Developer</div>
+        <div class="team-bio">Core developer on the ClawBio skill library. Builds and maintains the skill pipeline infrastructure.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SLIDE 8: ASK -->
+  <div class="slide" id="slide-8">
+    <div class="label">The Ask</div>
+    <h2 class="title">Pre-seed. <span class="em">Three milestones.</span> Twelve months.</h2>
+    <div class="ask-grid">
+      <div class="ask-card">
+        <div class="ask-num">01</div>
+        <div class="ask-milestone">100 Skills</div>
+        <div class="ask-desc">Expand the library to cover the 100 most-cited methods in genomics, pharmacogenomics, and population genetics.</div>
+        <span class="ask-pct">40% of raise</span>
+      </div>
+      <div class="ask-card">
+        <div class="ask-num">02</div>
+        <div class="ask-milestone">ClawHub Registry</div>
+        <div class="ask-desc">Build and launch the managed registry for verified, clinically-validated skills. First institutional revenue.</div>
+        <span class="ask-pct">35% of raise</span>
+      </div>
+      <div class="ask-card">
+        <div class="ask-num">03</div>
+        <div class="ask-milestone">Clinical Hire</div>
+        <div class="ask-desc">One person with clinical genomics implementation experience to own institutional sales.</div>
+        <span class="ask-pct">25% of raise</span>
+      </div>
+    </div>
+    <div class="ask-closing">ClawBio is where biological AI gets its skills.</div>
+  </div>
+
+</div><!-- /deck -->
+
+<script>
+const slides = document.querySelectorAll('.slide');
+const total = slides.length;
+let current = 0;
+
+function goTo(n) {
+  if (n < 0 || n >= total) return;
+  slides[current].classList.remove('active');
+  slides[current].classList.add('exit');
+  setTimeout(() => slides[current].classList.remove('exit'), 450);
+  current = n;
+  slides[current].classList.add('active');
+  document.getElementById('counter').textContent = (current + 1) + ' / ' + total;
+  document.getElementById('progress-bar').style.width = ((current + 1) / total * 100) + '%';
+  // hide hint after first advance
+  if (current > 0) document.getElementById('hint').classList.add('hidden');
+}
+
+document.getElementById('btn-prev').addEventListener('click', () => goTo(current - 1));
+document.getElementById('btn-next').addEventListener('click', () => goTo(current + 1));
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'ArrowDown') { e.preventDefault(); goTo(current + 1); }
+  if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') { e.preventDefault(); goTo(current - 1); }
+});
+
+// touch swipe
+let tx = 0;
+document.addEventListener('touchstart', e => { tx = e.touches[0].clientX; }, {passive: true});
+document.addEventListener('touchend', e => {
+  const dx = e.changedTouches[0].clientX - tx;
+  if (Math.abs(dx) > 50) dx < 0 ? goTo(current + 1) : goTo(current - 1);
+}, {passive: true});
+
+// init progress
+document.getElementById('progress-bar').style.width = (1 / total * 100) + '%';
+</script>
+</body>
+</html>
