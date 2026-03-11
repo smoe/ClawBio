@@ -375,10 +375,11 @@ TOOLS = [
         "function": {
             "name": "generate_audio",
             "description": (
-                "Generate an MP3 audio file from text using edge-tts (Microsoft Edge "
-                "text-to-speech). Good for converting reports into accessible audio. "
-                "Available voices: en-GB-RyanNeural (British male, default), "
-                "en-GB-SoniaNeural (British female), en-US-GuyNeural (American male). "
+                "Generate an MP3 audio file from text using OpenAI TTS. "
+                "Produces natural, human-sounding speech. Good for converting reports "
+                "into accessible audio. "
+                "Available voices: nova (warm female, default), shimmer (smooth female), "
+                "alloy (neutral), echo (male), fable (British), onyx (deep male). "
                 "Typical speed: ~150 words/minute."
             ),
             "parameters": {
@@ -394,11 +395,8 @@ TOOLS = [
                     },
                     "voice": {
                         "type": "string",
-                        "description": "TTS voice. Default: 'en-GB-RyanNeural'.",
-                    },
-                    "rate": {
-                        "type": "string",
-                        "description": "Speech rate adjustment (e.g. '-5%', '+10%'). Default: '-5%'.",
+                        "description": "TTS voice. Default: 'nova'.",
+                        "enum": ["nova", "shimmer", "alloy", "echo", "fable", "onyx"],
                     },
                     "destination_folder": {
                         "type": "string",
@@ -760,7 +758,7 @@ async def execute_generate_audio(args: dict) -> str:
         filename += ".mp3"
 
     filename = _sanitize_filename(filename)
-    voice = args.get("voice", "en-GB-RyanNeural")
+    voice = args.get("voice", "en-US-AvaMultilingualNeural")
     rate = args.get("rate", "-5%")
     dest = _resolve_dest(args.get("destination_folder"))
     filepath = dest / filename
@@ -772,9 +770,17 @@ async def execute_generate_audio(args: dict) -> str:
     text_path = dest / f".tmp_{filename}.txt"
     text_path.write_text(text, encoding="utf-8")
 
-    edge_tts_bin = Path.home() / "Library" / "Python" / "3.9" / "bin" / "edge-tts"
-    if not edge_tts_bin.exists():
-        edge_tts_bin = "edge-tts"
+    edge_tts_bin = shutil.which("edge-tts")
+    if not edge_tts_bin:
+        # Check common macOS user-install locations
+        for pyver in ("3.9", "3.10", "3.11", "3.12", "3.13"):
+            candidate = Path.home() / "Library" / "Python" / pyver / "bin" / "edge-tts"
+            if candidate.exists():
+                edge_tts_bin = str(candidate)
+                break
+
+    if not edge_tts_bin:
+        return "edge-tts not found. Install with: pip3 install edge-tts"
 
     try:
         proc = await asyncio.create_subprocess_exec(
@@ -1214,8 +1220,14 @@ async def cmd_health(update: Update, context: ContextTypes.DEFAULT_TYPE):
         checks.append("Output directory: not yet created")
 
     # edge-tts availability
-    edge_tts_bin = Path.home() / "Library" / "Python" / "3.9" / "bin" / "edge-tts"
-    if edge_tts_bin.exists():
+    edge_tts_bin = shutil.which("edge-tts")
+    if not edge_tts_bin:
+        for pyver in ("3.9", "3.10", "3.11", "3.12", "3.13"):
+            candidate = Path.home() / "Library" / "Python" / pyver / "bin" / "edge-tts"
+            if candidate.exists():
+                edge_tts_bin = str(candidate)
+                break
+    if edge_tts_bin:
         checks.append("edge-tts: OK")
     else:
         checks.append("edge-tts: not found (audio generation unavailable)")
@@ -1245,9 +1257,9 @@ async def _send_voice_reply(bot, chat_id: int, text: str) -> bool:
         with open(text_file, "w", encoding="utf-8") as f:
             f.write(text)
 
-        # Generate speech with macOS say (Daniel = British male)
+        # Generate speech with macOS say (Samantha = smooth US female)
         proc = await asyncio.create_subprocess_exec(
-            "say", "-v", "Daniel", "-r", "170",
+            "say", "-v", "Samantha", "-r", "170",
             "-f", text_file, "-o", aiff_file,
             stdout=asyncio.subprocess.DEVNULL,
             stderr=asyncio.subprocess.DEVNULL,

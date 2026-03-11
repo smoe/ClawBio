@@ -1,20 +1,36 @@
 #!/usr/bin/env python3
 """
-roboterri_discord.py — RoboTerri ClawBio Discord Bot
-=====================================================
-A Discord bot that runs ClawBio bioinformatics skills using any LLM
-as the reasoning engine. Handles text messages, genetic file uploads,
-and medication photos.
+roboterri_whatsapp.py — RoboTerri ClawBio WhatsApp Bot
+=======================================================
+A WhatsApp bot using Meta's Cloud API that runs ClawBio bioinformatics
+skills using any LLM as the reasoning engine. Handles text messages,
+genetic file uploads, and medication photos.
 
 Works with any OpenAI-compatible provider: OpenAI, Anthropic (via proxy),
 Google, Mistral, Groq, Together, OpenRouter, Ollama, LM Studio, etc.
 
 Prerequisites:
-    pip3 install discord.py openai python-dotenv
+    pip3 install flask openai python-dotenv requests
 
 Usage:
     # Set environment variables in .env (see bot/README.md)
-    python3 bot/roboterri_discord.py
+    python3 bot/roboterri_whatsapp.py
+
+Setup (Meta WhatsApp Cloud API):
+    1. Go to https://developers.facebook.com and create an app (type: Business)
+    2. Add the WhatsApp product to your app
+    3. In WhatsApp > API Setup, get your:
+       - Phone Number ID
+       - Permanent access token (System User token recommended)
+    4. Configure a webhook:
+       - URL: https://your-domain/webhook  (use ngrok for local dev)
+       - Verify token: set WHATSAPP_VERIFY_TOKEN in .env
+       - Subscribe to: messages
+    5. Set env vars in .env:
+       WHATSAPP_TOKEN=your_permanent_access_token
+       WHATSAPP_PHONE_NUMBER_ID=your_phone_number_id
+       WHATSAPP_VERIFY_TOKEN=your_chosen_verify_token
+       WHATSAPP_ADMIN_PHONE=your_phone_number  (optional, e.g. 447700900000)
 """
 
 import asyncio
@@ -26,12 +42,14 @@ import re
 import shutil
 import sys
 import tempfile
+import threading
 import time
 from datetime import datetime
 from pathlib import Path
 
-import discord
+import requests
 from dotenv import load_dotenv
+from flask import Flask, request, jsonify
 from openai import AsyncOpenAI, APIError
 
 # --------------------------------------------------------------------------- #
@@ -40,58 +58,27 @@ from openai import AsyncOpenAI, APIError
 
 load_dotenv()
 
-DISCORD_BOT_TOKEN = os.environ.get("DISCORD_BOT_TOKEN", "")
+WHATSAPP_TOKEN = os.environ.get("WHATSAPP_TOKEN", "")
+WHATSAPP_PHONE_NUMBER_ID = os.environ.get("WHATSAPP_PHONE_NUMBER_ID", "")
+WHATSAPP_VERIFY_TOKEN = os.environ.get("WHATSAPP_VERIFY_TOKEN", "roboterri_verify")
+WHATSAPP_ADMIN_PHONE = os.environ.get("WHATSAPP_ADMIN_PHONE", "")
+WHATSAPP_PORT = int(os.environ.get("WHATSAPP_PORT", "5001"))
+
 LLM_API_KEY = os.environ.get("LLM_API_KEY", "")
 LLM_BASE_URL = os.environ.get("LLM_BASE_URL", "")
 CLAWBIO_MODEL = os.environ.get("CLAWBIO_MODEL", "gpt-4o")
-ADMIN_USER_ID = int(os.environ.get("DISCORD_ADMIN_USER_ID", "0") or "0")
 
 # Rate limiting: messages per user per hour (0 = unlimited)
 RATE_LIMIT_PER_HOUR = int(os.environ.get("RATE_LIMIT_PER_HOUR", "10"))
 
-CHANNELS_FILE = Path(__file__).resolve().parent / ".channels.json"
-
-
-def load_channels() -> list[dict]:
-    """Load authorised channels from .channels.json."""
-    if not CHANNELS_FILE.exists():
-        # Fall back to env var for backwards compatibility
-        env_id = os.environ.get("DISCORD_CHANNEL_ID", "0")
-        if env_id and env_id != "0":
-            return [{"id": int(env_id), "name": "default", "skills": "all"}]
-        return []
-    with open(CHANNELS_FILE, encoding="utf-8") as f:
-        return json.load(f)
-
-
-CHANNELS = load_channels()
-AUTHORISED_CHANNEL_IDS = {ch["id"] for ch in CHANNELS}
-
-
-def reload_channels():
-    """Reload channels from .channels.json in place."""
-    CHANNELS.clear()
-    CHANNELS.extend(load_channels())
-    AUTHORISED_CHANNEL_IDS.clear()
-    AUTHORISED_CHANNEL_IDS.update(ch["id"] for ch in CHANNELS)
-
-
-def get_channel_config(channel_id: int) -> dict | None:
-    """Return config for a channel, or None if not authorised."""
-    for ch in CHANNELS:
-        if ch["id"] == channel_id:
-            return ch
-    return None
-
-
-if not DISCORD_BOT_TOKEN:
-    print("Error: DISCORD_BOT_TOKEN not set. See bot/README.md for setup.")
+if not WHATSAPP_TOKEN:
+    print("Error: WHATSAPP_TOKEN not set. See bot/README.md for setup.")
+    sys.exit(1)
+if not WHATSAPP_PHONE_NUMBER_ID:
+    print("Error: WHATSAPP_PHONE_NUMBER_ID not set. See bot/README.md for setup.")
     sys.exit(1)
 if not LLM_API_KEY:
     print("Error: LLM_API_KEY not set. See bot/README.md for setup.")
-    sys.exit(1)
-if not AUTHORISED_CHANNEL_IDS:
-    print("Error: No channels configured. Add channels to bot/.channels.json or set DISCORD_CHANNEL_ID in .env.")
     sys.exit(1)
 
 CLAWBIO_DIR = Path(__file__).resolve().parent.parent
@@ -107,15 +94,22 @@ OWNER_GENOME = CLAWBIO_DIR / "skills" / "genome-compare" / "data" / "manuel_corp
 MAX_UPLOAD_BYTES = 50 * 1024 * 1024  # 50 MB
 MAX_PHOTO_BYTES = 20 * 1024 * 1024   # 20 MB
 
+# WhatsApp API base URL
+WA_API_BASE = f"https://graph.facebook.com/v21.0/{WHATSAPP_PHONE_NUMBER_ID}"
+WA_HEADERS = {
+    "Authorization": f"Bearer {WHATSAPP_TOKEN}",
+    "Content-Type": "application/json",
+}
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(name)s] %(levelname)s: %(message)s",
 )
-logger = logging.getLogger("roboterri-discord")
+logger = logging.getLogger("roboterri-whatsapp")
 
 
 # ---------------------------------------------------------------------------
-# Redact bot token from log output
+# Redact tokens from log output
 # ---------------------------------------------------------------------------
 class _TokenRedactFilter(logging.Filter):
     def __init__(self, token: str):
@@ -138,10 +132,10 @@ class _TokenRedactFilter(logging.Filter):
         return True
 
 
-if DISCORD_BOT_TOKEN:
-    _redact = _TokenRedactFilter(DISCORD_BOT_TOKEN)
-    for _ln in ("discord", "discord.http", "discord.gateway"):
-        logging.getLogger(_ln).addFilter(_redact)
+if WHATSAPP_TOKEN:
+    _redact = _TokenRedactFilter(WHATSAPP_TOKEN)
+    logging.getLogger("urllib3").addFilter(_redact)
+    logging.getLogger("requests").addFilter(_redact)
 
 
 # ---------------------------------------------------------------------------
@@ -149,7 +143,7 @@ if DISCORD_BOT_TOKEN:
 # ---------------------------------------------------------------------------
 _AUDIT_LOG_DIR = CLAWBIO_DIR / "bot" / "logs"
 _AUDIT_LOG_DIR.mkdir(parents=True, exist_ok=True)
-_AUDIT_LOG_PATH = _AUDIT_LOG_DIR / "audit_discord.jsonl"
+_AUDIT_LOG_PATH = _AUDIT_LOG_DIR / "audit_whatsapp.jsonl"
 
 
 def _audit(event: str, **kwargs):
@@ -163,21 +157,9 @@ def _audit(event: str, **kwargs):
         pass
 
 
-def _user_ctx(message: discord.Message) -> dict:
-    """Extract user identity for audit logging."""
-    return {
-        "user_id": message.author.id,
-        "username": str(message.author),
-        "display_name": message.author.display_name,
-        "channel_id": message.channel.id,
-        "channel_name": getattr(message.channel, "name", "DM"),
-        "is_admin": is_admin(message),
-    }
-
-
-def is_admin(message: discord.Message) -> bool:
-    """Check if the message is from the admin user."""
-    return bool(ADMIN_USER_ID) and message.author.id == ADMIN_USER_ID
+def is_admin(phone: str) -> bool:
+    """Check if the phone number is the admin."""
+    return bool(WHATSAPP_ADMIN_PHONE) and phone == WHATSAPP_ADMIN_PHONE
 
 
 # --------------------------------------------------------------------------- #
@@ -214,25 +196,212 @@ if LLM_BASE_URL:
     _client_kwargs["base_url"] = LLM_BASE_URL
 llm = AsyncOpenAI(**_client_kwargs)
 
-conversations: dict[int, list] = {}
+conversations: dict[str, list] = {}  # keyed by phone number
 MAX_HISTORY = 20
 
-# Per-channel received file storage
-_received_files: dict[int, dict] = {}
+# Per-user received file storage
+_received_files: dict[str, dict] = {}
 
-# Pending media queue: channel_id -> list of {"type": "document"|"photo", "path": str}
-_pending_media: dict[int, list[dict]] = {}
+# Pending media queue: phone -> list of {"type": "document"|"photo", "path": str}
+_pending_media: dict[str, list[dict]] = {}
 
 # Pending text queue: bypass LLM paraphrasing for compare/drugphoto
 _pending_text: list[str] = []
 
-# Per-user voice reply toggle: user_id -> bool
-_voice_enabled: dict[int, bool] = {}
+# Per-user voice reply toggle
+_voice_enabled: dict[str, bool] = {}
+
+# Dedup: track recently processed message IDs
+_processed_messages: set[str] = set()
+_processed_messages_max = 1000
 
 BOT_START_TIME = time.time()
 
+# Async event loop for running coroutines from Flask threads
+_loop = asyncio.new_event_loop()
+_loop_thread = threading.Thread(target=_loop.run_forever, daemon=True)
+_loop_thread.start()
+
+
+def run_async(coro):
+    """Run an async coroutine from a sync Flask context."""
+    future = asyncio.run_coroutine_threadsafe(coro, _loop)
+    return future.result(timeout=180)
+
+
 # --------------------------------------------------------------------------- #
-# Tool definition (OpenAI function-calling format)
+# WhatsApp API helpers
+# --------------------------------------------------------------------------- #
+
+
+def wa_send_text(to: str, text: str):
+    """Send a text message via WhatsApp Cloud API."""
+    # WhatsApp has a 4096 char limit per message
+    MAX_LEN = 4096
+    text = strip_markup(text)
+    if not text:
+        return
+
+    chunks = []
+    if len(text) <= MAX_LEN:
+        chunks = [text]
+    else:
+        remaining = text
+        while remaining:
+            if len(remaining) <= MAX_LEN:
+                chunks.append(remaining)
+                break
+            split_at = remaining.rfind("\n\n", 0, MAX_LEN)
+            if split_at == -1:
+                split_at = remaining.rfind("\n", 0, MAX_LEN)
+            if split_at == -1:
+                split_at = MAX_LEN
+            chunks.append(remaining[:split_at])
+            remaining = remaining[split_at:].lstrip("\n")
+
+    for chunk in chunks:
+        if not chunk.strip():
+            continue
+        payload = {
+            "messaging_product": "whatsapp",
+            "to": to,
+            "type": "text",
+            "text": {"body": chunk},
+        }
+        try:
+            resp = requests.post(
+                f"{WA_API_BASE}/messages",
+                headers=WA_HEADERS,
+                json=payload,
+                timeout=30,
+            )
+            if resp.status_code != 200:
+                logger.error(f"WhatsApp send failed ({resp.status_code}): {resp.text[:300]}")
+        except Exception as e:
+            logger.error(f"WhatsApp send error: {e}")
+
+
+def wa_send_document(to: str, filepath: str, caption: str = ""):
+    """Upload and send a document via WhatsApp Cloud API."""
+    path = Path(filepath)
+    if not path.exists():
+        return
+
+    # Step 1: Upload media
+    mime_map = {
+        ".md": "text/markdown",
+        ".txt": "text/plain",
+        ".csv": "text/csv",
+        ".html": "text/html",
+        ".json": "application/json",
+        ".png": "image/png",
+        ".jpg": "image/jpeg",
+        ".jpeg": "image/jpeg",
+        ".pdf": "application/pdf",
+        ".mp3": "audio/mpeg",
+    }
+    mime = mime_map.get(path.suffix.lower(), "application/octet-stream")
+
+    try:
+        upload_resp = requests.post(
+            f"{WA_API_BASE}/media",
+            headers={"Authorization": f"Bearer {WHATSAPP_TOKEN}"},
+            files={"file": (path.name, open(path, "rb"), mime)},
+            data={"messaging_product": "whatsapp"},
+            timeout=60,
+        )
+        if upload_resp.status_code != 200:
+            logger.error(f"Media upload failed: {upload_resp.text[:300]}")
+            return
+        media_id = upload_resp.json().get("id")
+        if not media_id:
+            logger.error("No media ID returned from upload")
+            return
+    except Exception as e:
+        logger.error(f"Media upload error: {e}")
+        return
+
+    # Step 2: Send media message
+    if path.suffix.lower() in (".png", ".jpg", ".jpeg"):
+        msg_type = "image"
+        media_obj = {"id": media_id}
+        if caption:
+            media_obj["caption"] = caption
+    else:
+        msg_type = "document"
+        media_obj = {"id": media_id, "filename": path.name}
+        if caption:
+            media_obj["caption"] = caption
+
+    payload = {
+        "messaging_product": "whatsapp",
+        "to": to,
+        "type": msg_type,
+        msg_type: media_obj,
+    }
+    try:
+        resp = requests.post(
+            f"{WA_API_BASE}/messages",
+            headers=WA_HEADERS,
+            json=payload,
+            timeout=30,
+        )
+        if resp.status_code != 200:
+            logger.error(f"Media send failed: {resp.text[:300]}")
+    except Exception as e:
+        logger.error(f"Media send error: {e}")
+
+
+def wa_download_media(media_id: str) -> bytes | None:
+    """Download media from WhatsApp Cloud API by media ID."""
+    try:
+        # Get media URL
+        resp = requests.get(
+            f"https://graph.facebook.com/v21.0/{media_id}",
+            headers={"Authorization": f"Bearer {WHATSAPP_TOKEN}"},
+            timeout=30,
+        )
+        if resp.status_code != 200:
+            logger.error(f"Media URL fetch failed: {resp.text[:300]}")
+            return None
+        media_url = resp.json().get("url")
+        if not media_url:
+            return None
+
+        # Download media content
+        dl_resp = requests.get(
+            media_url,
+            headers={"Authorization": f"Bearer {WHATSAPP_TOKEN}"},
+            timeout=60,
+        )
+        if dl_resp.status_code != 200:
+            logger.error(f"Media download failed: {dl_resp.status_code}")
+            return None
+        return dl_resp.content
+    except Exception as e:
+        logger.error(f"Media download error: {e}")
+        return None
+
+
+def wa_mark_read(message_id: str):
+    """Mark a message as read."""
+    try:
+        requests.post(
+            f"{WA_API_BASE}/messages",
+            headers=WA_HEADERS,
+            json={
+                "messaging_product": "whatsapp",
+                "status": "read",
+                "message_id": message_id,
+            },
+            timeout=10,
+        )
+    except Exception:
+        pass
+
+
+# --------------------------------------------------------------------------- #
+# Tool definitions (OpenAI function-calling format)
 # --------------------------------------------------------------------------- #
 
 TOOLS = [
@@ -277,7 +446,7 @@ TOOLS = [
                         "type": "string",
                         "enum": ["file", "demo"],
                         "description": (
-                            "file: use a file the user sent via Discord. "
+                            "file: use a file the user sent via WhatsApp. "
                             "demo: run with built-in demo/synthetic data."
                         ),
                     },
@@ -341,7 +510,7 @@ TOOLS = [
         "function": {
             "name": "save_file",
             "description": (
-                "Save a file that was sent via Discord to a specific folder. "
+                "Save a file that was sent via WhatsApp to a specific folder. "
                 "The file is temporarily stored after download; use this tool to "
                 "move it to the requested destination. Only works for the most "
                 "recently received file. Default: saves to ClawBio data/ directory."
@@ -360,7 +529,7 @@ TOOLS = [
                         "type": "string",
                         "description": (
                             "Optional filename to save as. If not provided, uses "
-                            "the original filename from Discord."
+                            "the original filename from WhatsApp."
                         ),
                     },
                 },
@@ -404,11 +573,10 @@ TOOLS = [
         "function": {
             "name": "generate_audio",
             "description": (
-                "Generate an MP3 audio file from text using OpenAI TTS. "
-                "Produces natural, human-sounding speech. Good for converting reports "
-                "into accessible audio. "
-                "Available voices: nova (warm female, default), shimmer (smooth female), "
-                "alloy (neutral), echo (male), fable (British), onyx (deep male). "
+                "Generate an MP3 audio file from text using edge-tts (Microsoft Edge "
+                "text-to-speech). Good for converting reports into accessible audio. "
+                "Available voices: en-GB-RyanNeural (British male, default), "
+                "en-GB-SoniaNeural (British female), en-US-GuyNeural (American male). "
                 "Typical speed: ~150 words/minute."
             ),
             "parameters": {
@@ -424,8 +592,11 @@ TOOLS = [
                     },
                     "voice": {
                         "type": "string",
-                        "description": "TTS voice. Default: 'nova'.",
-                        "enum": ["nova", "shimmer", "alloy", "echo", "fable", "onyx"],
+                        "description": "TTS voice. Default: 'en-GB-RyanNeural'.",
+                    },
+                    "rate": {
+                        "type": "string",
+                        "description": "Speech rate adjustment (e.g. '-5%', '+10%'). Default: '-5%'.",
                     },
                     "destination_folder": {
                         "type": "string",
@@ -437,6 +608,7 @@ TOOLS = [
         },
     },
 ]
+
 
 # --------------------------------------------------------------------------- #
 # Security helpers
@@ -497,7 +669,7 @@ async def execute_clawbio(args: dict) -> str:
 
         orch_input = query
         if mode == "file":
-            for _cid, info in _received_files.items():
+            for _uid, info in _received_files.items():
                 orch_input = info["path"]
                 break
         if not orch_input:
@@ -532,7 +704,7 @@ async def execute_clawbio(args: dict) -> str:
                 avail = list(orch_to_key.values())
                 return (
                     f"Orchestrator detected skill '{detected}' which is not "
-                    f"available via Discord. Available: {avail}"
+                    f"available via WhatsApp. Available: {avail}"
                 )
             logger.info(f"Auto-routed to: {skill_key} (via {routing.get('detection_method', '?')})")
         except asyncio.TimeoutError:
@@ -545,13 +717,12 @@ async def execute_clawbio(args: dict) -> str:
     # Resolve input and profile for file mode
     input_path = None
     profile_path = None
-    for _cid, info in _received_files.items():
+    for _uid, info in _received_files.items():
         input_path = info.get("path")
         profile_path = info.get("profile_path")
         break
 
     if mode == "file" and not input_path and not profile_path:
-        # Fall back to owner's genome for admin users
         if OWNER_GENOME.exists():
             input_path = str(OWNER_GENOME)
             logger.info(f"No file uploaded — using owner genome: {OWNER_GENOME.name}")
@@ -565,7 +736,6 @@ async def execute_clawbio(args: dict) -> str:
     # Build command
     cmd = [sys.executable, str(CLAWBIO_PY), "run", skill_key]
 
-    # Profile-based skills: prefer --profile over --input
     if skill_key == "profile":
         if mode == "demo":
             cmd.append("--demo")
@@ -606,11 +776,9 @@ async def execute_clawbio(args: dict) -> str:
     elif input_path:
         cmd.extend(["--input", str(input_path)])
 
-    # Skills with summary_default (compare, drugphoto) skip --output
     if skill_key not in ("compare", "drugphoto"):
         cmd.extend(["--output", str(out_dir)])
 
-    # Pass drug_name and visible_dose for drugphoto
     if skill_key == "drugphoto":
         drug_name = args.get("drug_name", "")
         visible_dose = args.get("visible_dose", "")
@@ -640,27 +808,24 @@ async def execute_clawbio(args: dict) -> str:
         err = stderr_str[-1500:] if stderr_str else stdout_str[-1500:] if stdout_str else "unknown error"
         return f"{skill_key} failed (exit {proc.returncode}):\n{err}"
 
-    # For compare / drugphoto / profile: send stdout directly (bypass LLM paraphrasing)
     if skill_key in ("compare", "drugphoto", "profile"):
         raw_output = stdout_str.strip()
         if raw_output:
             _pending_text.append(raw_output)
         return "Result sent directly to chat. Do not repeat or paraphrase it."
 
-    # For other skills: collect report + figures from output directory
     if out_dir.exists():
         media_items = []
         for f in sorted(out_dir.rglob("*")):
             if not f.is_file():
                 continue
-            if f.suffix == ".md":
+            if f.suffix in (".md", ".html"):
                 media_items.append({"type": "document", "path": str(f)})
             elif f.suffix == ".png":
                 media_items.append({"type": "photo", "path": str(f)})
         if media_items:
-            _pending_media[0] = _pending_media.get(0, []) + media_items
+            _pending_media["__current__"] = _pending_media.get("__current__", []) + media_items
 
-    # Read report for chat display
     report_text = ""
     if out_dir.exists():
         for pattern in ["report.md", "*_report.md", "*.md"]:
@@ -675,7 +840,6 @@ async def execute_clawbio(args: dict) -> str:
     if not report_text:
         return stdout_str if stdout_str else f"{skill_key} completed. Output: {out_dir}"
 
-    # Trim verbose sections for readability but ALWAYS keep disclaimer.
     keep_lines = []
     skip = False
     for line in report_text.split("\n"):
@@ -690,7 +854,7 @@ async def execute_clawbio(args: dict) -> str:
         elif line.startswith("## Reproducibility"):
             skip = True
         elif line.startswith("## Disclaimer"):
-            skip = False  # always show disclaimer
+            skip = False
         if line.startswith("!["):
             continue
         if not skip:
@@ -707,7 +871,7 @@ async def execute_clawbio(args: dict) -> str:
 async def execute_save_file(args: dict) -> str:
     """Save the most recently received file to the requested destination."""
     file_info = None
-    for _cid, info in _received_files.items():
+    for _uid, info in _received_files.items():
         file_info = info
         break
 
@@ -768,7 +932,7 @@ async def execute_write_file(args: dict) -> str:
 
 
 async def execute_generate_audio(args: dict) -> str:
-    """Generate MP3 audio from text using OpenAI TTS API."""
+    """Generate MP3 audio from text using edge-tts."""
     text = args.get("text")
     filename = args.get("filename")
     if not text:
@@ -779,71 +943,41 @@ async def execute_generate_audio(args: dict) -> str:
         filename += ".mp3"
 
     filename = _sanitize_filename(filename)
-    voice = args.get("voice", "nova")
+    voice = args.get("voice", "en-GB-RyanNeural")
+    rate = args.get("rate", "-5%")
     dest = _resolve_dest(args.get("destination_folder"))
     filepath = dest / filename
 
     if not _validate_path(filepath, dest):
         return f"Error: filename '{filename}' would escape the destination directory."
 
-    # OpenAI TTS has a 4096-char input limit — split if needed
-    MAX_CHUNK = 4096
-    chunks = [text[i:i + MAX_CHUNK] for i in range(0, len(text), MAX_CHUNK)]
+    text_path = dest / f".tmp_{filename}.txt"
+    text_path.write_text(text, encoding="utf-8")
+
+    edge_tts_bin = Path.home() / "Library" / "Python" / "3.9" / "bin" / "edge-tts"
+    if not edge_tts_bin.exists():
+        edge_tts_bin = "edge-tts"
 
     try:
-        # Use a direct OpenAI client for TTS (not the LLM proxy)
-        tts_client = AsyncOpenAI(api_key=LLM_API_KEY)
+        proc = await asyncio.create_subprocess_exec(
+            str(edge_tts_bin),
+            "--voice", voice,
+            f"--rate={rate}",
+            "--file", str(text_path),
+            "--write-media", str(filepath),
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=300)
 
-        if len(chunks) == 1:
-            response = await asyncio.wait_for(
-                tts_client.audio.speech.create(
-                    model="tts-1-hd",
-                    voice=voice,
-                    input=chunks[0],
-                ),
-                timeout=300,
-            )
-            response.stream_to_file(str(filepath))
-        else:
-            # Multiple chunks: generate and concatenate
-            part_files = []
-            for i, chunk in enumerate(chunks):
-                part_path = dest / f".tmp_{filename}_part{i}.mp3"
-                response = await asyncio.wait_for(
-                    tts_client.audio.speech.create(
-                        model="tts-1-hd",
-                        voice=voice,
-                        input=chunk,
-                    ),
-                    timeout=300,
-                )
-                response.stream_to_file(str(part_path))
-                part_files.append(part_path)
+        try:
+            text_path.unlink()
+        except OSError:
+            pass
 
-            # Concatenate with ffmpeg
-            list_file = dest / f".tmp_{filename}_list.txt"
-            list_file.write_text(
-                "\n".join(f"file '{p}'" for p in part_files),
-                encoding="utf-8",
-            )
-            proc = await asyncio.create_subprocess_exec(
-                "ffmpeg", "-y", "-f", "concat", "-safe", "0",
-                "-i", str(list_file), "-c", "copy", str(filepath),
-                stdout=asyncio.subprocess.DEVNULL,
-                stderr=asyncio.subprocess.DEVNULL,
-            )
-            await proc.wait()
-
-            # Cleanup temp files
-            for p in part_files:
-                try:
-                    p.unlink()
-                except OSError:
-                    pass
-            try:
-                list_file.unlink()
-            except OSError:
-                pass
+        if proc.returncode != 0:
+            err = stderr.decode()[-300:] if stderr else "unknown error"
+            return f"Audio generation failed (exit {proc.returncode}): {err}"
 
         size_mb = filepath.stat().st_size / (1024 * 1024)
         word_count = len(text.split())
@@ -856,13 +990,21 @@ async def execute_generate_audio(args: dict) -> str:
         )
 
     except asyncio.TimeoutError:
+        try:
+            text_path.unlink()
+        except OSError:
+            pass
         return "Audio generation timed out after 5 minutes."
-    except APIError as e:
-        return f"OpenAI TTS API error: {e}"
+    except FileNotFoundError:
+        try:
+            text_path.unlink()
+        except OSError:
+            pass
+        return "edge-tts not found. Install with: pip3 install edge-tts"
 
 
 # --------------------------------------------------------------------------- #
-# LLM tool loop (OpenAI-compatible chat completions + function calling)
+# LLM tool loop
 # --------------------------------------------------------------------------- #
 
 TOOL_EXECUTORS = {
@@ -875,21 +1017,13 @@ TOOL_EXECUTORS = {
 MAX_TOOL_ITERATIONS = 10
 
 
-async def llm_tool_loop(channel_id: int, user_content: str | list) -> str:
-    """
-    Run the LLM tool-use loop (OpenAI chat completions format):
-    1. Append user message to history
-    2. Call LLM with system prompt + history + tools
-    3. If tool_calls -> execute -> append results -> call again
-    4. Return final text
-    """
-    history = conversations.setdefault(channel_id, [])
+async def llm_tool_loop(phone: str, user_content: str | list) -> str:
+    """Run the LLM tool-use loop."""
+    history = conversations.setdefault(phone, [])
 
-    # Build user message in OpenAI format
     if isinstance(user_content, str):
         history.append({"role": "user", "content": user_content})
     else:
-        # Multimodal content blocks -- convert to OpenAI format
         oai_parts = []
         for block in user_content:
             if block.get("type") == "text":
@@ -906,18 +1040,16 @@ async def llm_tool_loop(channel_id: int, user_content: str | list) -> str:
     if len(history) > MAX_HISTORY:
         history[:] = history[-MAX_HISTORY:]
 
-    # Sanitise: strip orphaned tool messages that lack a preceding
-    # assistant message with tool_calls (prevents API 400 errors).
+    # Sanitise orphaned tool messages
     sanitised: list[dict] = []
     for msg in history:
         if msg.get("role") == "tool":
-            # Only keep if previous message is assistant with tool_calls
             if sanitised and sanitised[-1].get("role") == "assistant":
                 if sanitised[-1].get("tool_calls"):
                     sanitised.append(msg)
                     continue
             logger.warning("Dropped orphaned tool message from history")
-            _audit("history_sanitised", channel_id=channel_id,
+            _audit("history_sanitised", phone=phone,
                    detail="orphaned_tool_message_dropped")
             continue
         sanitised.append(msg)
@@ -939,7 +1071,6 @@ async def llm_tool_loop(channel_id: int, user_content: str | list) -> str:
         choice = response.choices[0]
         last_message = choice.message
 
-        # Append assistant message to history
         assistant_msg = {"role": "assistant", "content": last_message.content or ""}
         if last_message.tool_calls:
             assistant_msg["tool_calls"] = [
@@ -955,11 +1086,9 @@ async def llm_tool_loop(channel_id: int, user_content: str | list) -> str:
             ]
         history.append(assistant_msg)
 
-        # No tool calls -- return text
         if not last_message.tool_calls:
             return last_message.content or "(no response)"
 
-        # Execute tool calls and append results
         for tc in last_message.tool_calls:
             func_name = tc.function.name
             executor = TOOL_EXECUTORS.get(func_name)
@@ -969,13 +1098,13 @@ async def llm_tool_loop(channel_id: int, user_content: str | list) -> str:
                 except json.JSONDecodeError:
                     args = {}
                 logger.info(f"Tool call: {func_name}({json.dumps(args)[:200]})")
-                _audit("tool_call", channel_id=channel_id, tool=func_name,
+                _audit("tool_call", phone=phone, tool=func_name,
                        args_preview=json.dumps(args, default=str)[:300])
                 try:
                     result = await executor(args)
                 except Exception as tool_err:
                     logger.error(f"Tool {func_name} raised: {tool_err}", exc_info=True)
-                    _audit("tool_error", channel_id=channel_id, tool=func_name,
+                    _audit("tool_error", phone=phone, tool=func_name,
                            error=str(tool_err)[:300])
                     result = f"Error executing {func_name}: {type(tool_err).__name__}: {tool_err}"
             else:
@@ -994,17 +1123,16 @@ async def llm_tool_loop(channel_id: int, user_content: str | list) -> str:
 # Rate limiting
 # --------------------------------------------------------------------------- #
 
-_rate_buckets: dict[int, list[float]] = {}
+_rate_buckets: dict[str, list[float]] = {}
 
 
-def _check_rate_limit(message: discord.Message) -> bool:
+def _check_rate_limit(phone: str) -> bool:
     """Return True if the user is within rate limits (or is admin)."""
-    if RATE_LIMIT_PER_HOUR <= 0 or is_admin(message):
+    if RATE_LIMIT_PER_HOUR <= 0 or is_admin(phone):
         return True
-    uid = message.author.id
     now = time.time()
-    window = 3600  # 1 hour
-    bucket = _rate_buckets.setdefault(uid, [])
+    window = 3600
+    bucket = _rate_buckets.setdefault(phone, [])
     bucket[:] = [t for t in bucket if now - t < window]
     if len(bucket) >= RATE_LIMIT_PER_HOUR:
         return False
@@ -1013,7 +1141,7 @@ def _check_rate_limit(message: discord.Message) -> bool:
 
 
 # --------------------------------------------------------------------------- #
-# Discord helpers
+# Text helpers
 # --------------------------------------------------------------------------- #
 
 IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp"}
@@ -1046,62 +1174,13 @@ def strip_markup(text: str) -> str:
     return text.strip()
 
 
-async def send_long_message(channel: discord.abc.Messageable, text: str):
-    """Send a message, splitting at 2000 chars (Discord limit). Strips markup."""
-    text = strip_markup(text)
-    if not text:
-        return
-    MAX_LEN = 2000
-    if len(text) <= MAX_LEN:
-        await channel.send(text)
-        return
-    chunks = []
-    while text:
-        if len(text) <= MAX_LEN:
-            chunks.append(text)
-            break
-        split_at = text.rfind("\n\n", 0, MAX_LEN)
-        if split_at == -1:
-            split_at = text.rfind("\n", 0, MAX_LEN)
-        if split_at == -1:
-            split_at = MAX_LEN
-        chunks.append(text[:split_at])
-        text = text[split_at:].lstrip("\n")
-    for chunk in chunks:
-        if chunk.strip():
-            await channel.send(chunk)
-
-
-async def drain_pending_media(channel: discord.abc.Messageable) -> None:
-    """Send any queued ClawBio media (documents + figures) after the text reply."""
-    items = _pending_media.pop(0, [])
-    if not items:
-        return
-    for item in items:
-        try:
-            path = Path(item["path"])
-            if not path.exists():
-                continue
-            caption = path.stem.replace("_", " ").title() if item["type"] == "photo" else ""
-            await channel.send(
-                content=caption or None,
-                file=discord.File(str(path), filename=path.name),
-            )
-        except Exception as e:
-            logger.warning(f"Failed to send media {item['path']}: {e}")
-
-
 # --------------------------------------------------------------------------- #
 # Voice reply helper
 # --------------------------------------------------------------------------- #
 
 
-async def _send_voice_reply(channel: discord.abc.Messageable, text: str) -> bool:
-    """Convert text to MP3 voice message and send via Discord.
-
-    Uses macOS say (Daniel voice) -> ffmpeg -> MP3.
-    Returns True if voice was sent, False on failure.
-    """
+async def _send_voice_reply(phone: str, text: str) -> bool:
+    """Generate voice reply and send via WhatsApp as audio."""
     with tempfile.TemporaryDirectory() as tmpdir:
         text_file = os.path.join(tmpdir, "reply.txt")
         aiff_file = os.path.join(tmpdir, "reply.aiff")
@@ -1110,9 +1189,8 @@ async def _send_voice_reply(channel: discord.abc.Messageable, text: str) -> bool
         with open(text_file, "w", encoding="utf-8") as f:
             f.write(text)
 
-        # Generate speech with macOS say (Samantha = smooth US female)
         proc = await asyncio.create_subprocess_exec(
-            "say", "-v", "Samantha", "-r", "170",
+            "say", "-v", "Daniel", "-r", "170",
             "-f", text_file, "-o", aiff_file,
             stdout=asyncio.subprocess.DEVNULL,
             stderr=asyncio.subprocess.DEVNULL,
@@ -1122,7 +1200,6 @@ async def _send_voice_reply(channel: discord.abc.Messageable, text: str) -> bool
             logger.warning("say command failed for voice reply")
             return False
 
-        # Convert to MP3 (Discord-friendly format)
         proc = await asyncio.create_subprocess_exec(
             "ffmpeg", "-y", "-i", aiff_file,
             "-codec:a", "libmp3lame", "-b:a", "128k",
@@ -1135,459 +1212,458 @@ async def _send_voice_reply(channel: discord.abc.Messageable, text: str) -> bool
             logger.warning("ffmpeg MP3 conversion failed for voice reply")
             return False
 
-        await channel.send(
-            file=discord.File(mp3_file, filename="voice_reply.mp3"),
-        )
+        wa_send_document(phone, mp3_file, caption="Voice reply")
 
     return True
 
 
 # --------------------------------------------------------------------------- #
-# Discord client
+# Drain pending media
 # --------------------------------------------------------------------------- #
 
-intents = discord.Intents.default()
-intents.message_content = True
-client = discord.Client(intents=intents)
 
-
-@client.event
-async def on_ready():
-    logger.info(f"Logged in as {client.user} (id: {client.user.id})")
-    logger.info(f"Authorised channels: {[ch['name'] for ch in CHANNELS]} ({len(CHANNELS)})")
-    logger.info(f"LLM model: {CLAWBIO_MODEL}")
-    logger.info(f"Admin user ID: {ADMIN_USER_ID or 'not set (public mode)'}")
-    logger.info(f"Rate limit: {RATE_LIMIT_PER_HOUR} msgs/hour per user (0=unlimited)")
-    if LLM_BASE_URL:
-        logger.info(f"LLM base URL: {LLM_BASE_URL}")
-    _audit("bot_start", model=CLAWBIO_MODEL,
-           admin_user=ADMIN_USER_ID, rate_limit=RATE_LIMIT_PER_HOUR)
-    print(f"RoboTerri Discord bot is running as {client.user}. Press Ctrl+C to stop.")
-
-
-@client.event
-async def on_message(message: discord.Message):
-    # Ignore own messages
-    if message.author == client.user:
-        return
-
-    # Only respond in authorised channels
-    if message.channel.id not in AUTHORISED_CHANNEL_IDS:
-        return
-
-    # ----- Commands ----- #
-
-    content = message.content.strip()
-
-    if content == "!reload":
-        reload_channels()
-        await message.channel.send(
-            f"Reloaded channel config -- {len(CHANNELS)} channel(s) authorised."
-        )
-        logger.info(f"Reloaded .channels.json: {AUTHORISED_CHANNEL_IDS}")
-        return
-
-    if content == "!start":
-        await message.channel.send(
-            "Welcome to ClawBio -- open-source bioinformatics at your fingertips!\n\n"
-            "I can analyse genetic data, check drug interactions, assess nutritional "
-            "genomics, estimate polygenic risk scores, and more.\n\n"
-            "Commands:\n"
-            "  `!skills`  -- list available bioinformatics skills\n"
-            "  `!demo <skill>`  -- run a demo (pharmgx, equity, nutrigx, compare, prs, profile)\n"
-            "  `!voice`  -- toggle voice replies on/off\n"
-            "  `!status`  -- bot info\n"
-            "  `!health`  -- system health check\n\n"
-            "Or just chat -- ask any bioinformatics question.\n"
-            "Attach a genetic data file (.txt, .csv, .vcf) to analyse it.\n"
-            "Attach a photo of a medication for personalised drug guidance.\n\n"
-            "ClawBio is a research tool, not a medical device. "
-            "Consult a healthcare professional before making medical decisions."
-        )
-        return
-
-    if content == "!skills":
+def drain_pending_media(phone: str):
+    """Send any queued ClawBio media after the text reply."""
+    items = _pending_media.pop("__current__", [])
+    for item in items:
         try:
-            proc = await asyncio.create_subprocess_exec(
-                sys.executable, str(CLAWBIO_PY), "list",
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-                cwd=str(CLAWBIO_DIR),
-            )
-            stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=15)
-            output = stdout.decode(errors="replace").strip()
-            await send_long_message(message.channel, output or "No skills found.")
+            path = Path(item["path"])
+            if not path.exists():
+                continue
+            caption = path.stem.replace("_", " ").title() if item["type"] == "photo" else ""
+            wa_send_document(phone, str(path), caption=caption)
         except Exception as e:
-            await message.channel.send(f"Error listing skills: {e}")
+            logger.warning(f"Failed to send media {item['path']}: {e}")
+
+
+# --------------------------------------------------------------------------- #
+# Message handler (called from Flask webhook)
+# --------------------------------------------------------------------------- #
+
+
+def handle_whatsapp_message(phone: str, msg: dict):
+    """Process an incoming WhatsApp message."""
+    msg_id = msg.get("id", "")
+    msg_type = msg.get("type", "")
+
+    # Dedup
+    if msg_id in _processed_messages:
+        return
+    _processed_messages.add(msg_id)
+    if len(_processed_messages) > _processed_messages_max:
+        # Trim oldest (sets are unordered, but this prevents unbounded growth)
+        while len(_processed_messages) > _processed_messages_max // 2:
+            _processed_messages.pop()
+
+    wa_mark_read(msg_id)
+
+    # Rate limit
+    if not _check_rate_limit(phone):
+        _audit("rate_limited", phone=phone)
+        wa_send_text(phone,
+                     f"You've reached the limit of {RATE_LIMIT_PER_HOUR} messages per hour. "
+                     "Please try again later.")
         return
 
-    if content == "!voice":
-        uid = message.author.id
-        current = _voice_enabled.get(uid, False)
-        _voice_enabled[uid] = not current
-        state = "ON" if not current else "OFF"
-        await message.channel.send(
-            f"Voice replies toggled {state}.\n"
-            f"{'I will now send voice memos alongside text replies.' if not current else 'Back to text-only replies.'}"
-        )
-        return
+    _audit("message", phone=phone, msg_type=msg_type)
 
-    if content == "!status":
-        uptime_secs = int(time.time() - BOT_START_TIME)
-        hours, remainder = divmod(uptime_secs, 3600)
-        minutes, secs = divmod(remainder, 60)
-        uptime_str = f"{hours}h {minutes}m {secs}s"
+    # ----- Text messages ----- #
+    if msg_type == "text":
+        text = msg.get("text", {}).get("body", "").strip()
+        if not text:
+            return
 
-        skills_dir = CLAWBIO_DIR / "skills"
-        skill_count = sum(
-            1 for d in skills_dir.iterdir()
-            if d.is_dir() and (d / "SKILL.md").exists()
-        ) if skills_dir.exists() else 0
+        logger.info(f"Message from {phone}: {text[:100]}")
 
-        status_msg = (
-            f"RoboTerri ClawBio Status\n"
-            f"========================\n"
-            f"Bot uptime: {uptime_str}\n"
-            f"LLM model: {CLAWBIO_MODEL}\n"
-            f"Skills available: {skill_count}\n"
-            f"ClawBio dir: {CLAWBIO_DIR}\n"
-        )
-        if LLM_BASE_URL:
-            status_msg += f"LLM endpoint: {LLM_BASE_URL}\n"
+        # Commands
+        text_lower = text.lower().strip()
 
-        await message.channel.send(status_msg)
-        return
-
-    if content == "!health":
-        checks = []
-
-        # ClawBio CLI
-        if CLAWBIO_PY.exists():
-            checks.append("ClawBio CLI: OK")
-        else:
-            checks.append("ClawBio CLI: MISSING")
-
-        # SOUL.md
-        if SOUL_MD.exists():
-            checks.append(f"SOUL.md: OK ({len(_soul)} chars)")
-        else:
-            checks.append("SOUL.md: MISSING (using fallback)")
-
-        # Skills
-        skills_dir = CLAWBIO_DIR / "skills"
-        if skills_dir.exists():
-            implemented = []
-            stub_only = []
-            for d in sorted(skills_dir.iterdir()):
-                if not d.is_dir() or not (d / "SKILL.md").exists():
-                    continue
-                has_py = any(d.glob("*.py"))
-                if has_py:
-                    implemented.append(d.name)
-                else:
-                    stub_only.append(d.name)
-            checks.append(f"Skills (implemented): {len(implemented)}")
-            checks.append(f"Skills (stub/planned): {len(stub_only)}")
-        else:
-            checks.append("Skills directory: MISSING")
-
-        # Output directory
-        if OUTPUT_DIR.exists():
-            output_count = sum(1 for _ in OUTPUT_DIR.iterdir())
-            checks.append(f"Output runs: {output_count}")
-        else:
-            checks.append("Output directory: not yet created")
-
-        # edge-tts availability
-        edge_tts_bin = shutil.which("edge-tts")
-        if not edge_tts_bin:
-            for pyver in ("3.9", "3.10", "3.11", "3.12", "3.13"):
-                candidate = Path.home() / "Library" / "Python" / pyver / "bin" / "edge-tts"
-                if candidate.exists():
-                    edge_tts_bin = str(candidate)
-                    break
-        if edge_tts_bin:
-            checks.append("edge-tts: OK")
-        else:
-            checks.append("edge-tts: not found (audio generation unavailable)")
-
-        await message.channel.send(
-            "ClawBio Health Check\n"
-            "====================\n" + "\n".join(checks)
-        )
-        return
-
-    if content.startswith("!demo"):
-        if not _check_rate_limit(message):
-            _audit("rate_limited", **_user_ctx(message))
-            await message.channel.send(
-                f"You've reached the limit of {RATE_LIMIT_PER_HOUR} messages per hour. "
-                "Please try again later."
+        if text_lower in ("!start", "start", "hi", "hello", "help"):
+            wa_send_text(phone,
+                "Welcome to ClawBio -- open-source bioinformatics at your fingertips!\n\n"
+                "I can analyse genetic data, check drug interactions, assess nutritional "
+                "genomics, estimate polygenic risk scores, and more.\n\n"
+                "Commands:\n"
+                "  !skills  -- list available bioinformatics skills\n"
+                "  !demo <skill>  -- run a demo (pharmgx, equity, nutrigx, compare, prs, profile)\n"
+                "  !voice  -- toggle voice replies on/off\n"
+                "  !status  -- bot info\n"
+                "  !health  -- system health check\n\n"
+                "Or just chat -- ask any bioinformatics question.\n"
+                "Send a genetic data file (.txt, .csv, .vcf) to analyse it.\n"
+                "Send a photo of a medication for personalised drug guidance.\n\n"
+                "ClawBio is a research tool, not a medical device. "
+                "Consult a healthcare professional before making medical decisions."
             )
             return
-        parts = content.split(maxsplit=1)
-        skill = parts[1].strip() if len(parts) > 1 else "pharmgx"
-        await message.channel.send(f"Running {skill} demo -- this may take a moment...")
-        async with message.channel.typing():
+
+        if text_lower == "!skills":
             try:
-                reply = await llm_tool_loop(
-                    message.channel.id,
-                    f"Run the {skill} demo using the clawbio tool with mode='demo'.",
+                import subprocess
+                proc = subprocess.run(
+                    [sys.executable, str(CLAWBIO_PY), "list"],
+                    capture_output=True, text=True, timeout=15,
+                    cwd=str(CLAWBIO_DIR),
                 )
+                wa_send_text(phone, proc.stdout.strip() or "No skills found.")
+            except Exception as e:
+                wa_send_text(phone, f"Error listing skills: {e}")
+            return
+
+        if text_lower == "!voice":
+            current = _voice_enabled.get(phone, False)
+            _voice_enabled[phone] = not current
+            state = "ON" if not current else "OFF"
+            wa_send_text(phone,
+                f"Voice replies toggled {state}.\n"
+                f"{'I will now send voice memos alongside text replies.' if not current else 'Back to text-only replies.'}"
+            )
+            return
+
+        if text_lower == "!status":
+            uptime_secs = int(time.time() - BOT_START_TIME)
+            hours, remainder = divmod(uptime_secs, 3600)
+            minutes, secs = divmod(remainder, 60)
+            uptime_str = f"{hours}h {minutes}m {secs}s"
+
+            skills_dir = CLAWBIO_DIR / "skills"
+            skill_count = sum(
+                1 for d in skills_dir.iterdir()
+                if d.is_dir() and (d / "SKILL.md").exists()
+            ) if skills_dir.exists() else 0
+
+            wa_send_text(phone,
+                f"RoboTerri ClawBio Status\n"
+                f"========================\n"
+                f"Bot uptime: {uptime_str}\n"
+                f"LLM model: {CLAWBIO_MODEL}\n"
+                f"Skills available: {skill_count}\n"
+                f"Platform: WhatsApp\n"
+            )
+            return
+
+        if text_lower == "!health":
+            checks = []
+            if CLAWBIO_PY.exists():
+                checks.append("ClawBio CLI: OK")
+            else:
+                checks.append("ClawBio CLI: MISSING")
+            if SOUL_MD.exists():
+                checks.append(f"SOUL.md: OK ({len(_soul)} chars)")
+            else:
+                checks.append("SOUL.md: MISSING (using fallback)")
+            skills_dir = CLAWBIO_DIR / "skills"
+            if skills_dir.exists():
+                implemented = sum(1 for d in skills_dir.iterdir()
+                                  if d.is_dir() and (d / "SKILL.md").exists() and any(d.glob("*.py")))
+                stub_only = sum(1 for d in skills_dir.iterdir()
+                                if d.is_dir() and (d / "SKILL.md").exists() and not any(d.glob("*.py")))
+                checks.append(f"Skills (implemented): {implemented}")
+                checks.append(f"Skills (stub/planned): {stub_only}")
+            if OUTPUT_DIR.exists():
+                checks.append(f"Output runs: {sum(1 for _ in OUTPUT_DIR.iterdir())}")
+            wa_send_text(phone,
+                "ClawBio Health Check\n"
+                "====================\n" + "\n".join(checks)
+            )
+            return
+
+        if text_lower.startswith("!demo"):
+            parts = text.split(maxsplit=1)
+            skill = parts[1].strip() if len(parts) > 1 else "pharmgx"
+            wa_send_text(phone, f"Running {skill} demo -- this may take a moment...")
+            try:
+                reply = run_async(llm_tool_loop(phone,
+                    f"Run the {skill} demo using the clawbio tool with mode='demo'."))
                 if _pending_text:
                     reply = "\n\n".join(_pending_text)
                     _pending_text.clear()
-                await send_long_message(message.channel, reply)
-                await drain_pending_media(message.channel)
-                # Voice reply if toggled on
-                if _voice_enabled.get(message.author.id):
+                wa_send_text(phone, reply)
+                drain_pending_media(phone)
+                if _voice_enabled.get(phone):
                     try:
-                        await _send_voice_reply(message.channel, reply)
+                        run_async(_send_voice_reply(phone, reply))
                     except Exception as ve:
                         logger.warning(f"Voice reply failed: {ve}")
             except Exception as e:
                 logger.error(f"Demo error: {e}", exc_info=True)
-                await message.channel.send(f"Demo failed: {e}")
-        return
+                wa_send_text(phone, f"Demo failed: {e}")
+            return
 
-    # ----- Attachments: images and genetic data files ----- #
-
-    has_image = False
-    has_genetic_file = False
-
-    for attachment in message.attachments:
-        ext = Path(attachment.filename).suffix.lower()
-        content_type = attachment.content_type or ""
-
-        if content_type.startswith("image/") or ext in IMAGE_EXTENSIONS:
-            if not _check_rate_limit(message):
-                _audit("rate_limited", **_user_ctx(message))
-                await message.channel.send(
-                    f"You've reached the limit of {RATE_LIMIT_PER_HOUR} messages per hour. "
-                    "Please try again later."
-                )
-                return
-
-            has_image = True
-            # Download image and encode to base64
-            img_bytes = await attachment.read()
-
-            # File size check
-            if len(img_bytes) > MAX_PHOTO_BYTES:
-                await message.channel.send(
-                    f"Photo too large ({len(img_bytes) / (1024*1024):.1f} MB). "
-                    f"Maximum: {MAX_PHOTO_BYTES / (1024*1024):.0f} MB."
-                )
-                return
-
-            img_b64 = base64.standard_b64encode(img_bytes).decode("ascii")
-
-            media_type = content_type if content_type.startswith("image/") else "image/jpeg"
-            filename = _sanitize_filename(attachment.filename)
-            logger.info(f"Image received: {filename} ({len(img_bytes)} bytes, {media_type})")
-            _audit("photo", **_user_ctx(message), size_bytes=len(img_bytes),
-                   media_type=media_type)
-
-            # Store for potential file-based skill use
-            tmp_path = Path(tempfile.gettempdir()) / f"roboterri_{filename}"
-            tmp_path.write_bytes(img_bytes)
-            _received_files[message.channel.id] = {
-                "path": str(tmp_path), "filename": filename,
-            }
-
-            caption = message.content.strip() if message.content else ""
-            content_blocks = [
-                {
-                    "type": "image",
-                    "source": {
-                        "type": "base64",
-                        "media_type": media_type,
-                        "data": img_b64,
-                    },
-                },
-            ]
-            if caption:
-                content_blocks.append({"type": "text", "text": caption})
-            else:
-                content_blocks.append({
-                    "type": "text",
-                    "text": (
-                        "[Image sent without caption. Look at this image. "
-                        "If it shows a medication, drug packaging, pill bottle, blister pack, or "
-                        "any pharmaceutical product: immediately identify the drug name and any "
-                        "visible dosage, then call the clawbio tool with skill='drugphoto', "
-                        "mode='demo', drug_name=<identified drug>, and visible_dose=<dose if readable>. "
-                        "Do NOT ask what is needed -- just run the lookup automatically. "
-                        "If the image is not a medication, describe what you see and ask if "
-                        "anything specific is needed.]"
-                    ),
-                })
-
-            async with message.channel.typing():
-                try:
-                    reply = await llm_tool_loop(message.channel.id, content_blocks)
-                    if _pending_text:
-                        reply = "\n\n".join(_pending_text)
-                        _pending_text.clear()
-                    await send_long_message(message.channel, reply)
-                    # Voice reply if toggled on
-                    if _voice_enabled.get(message.author.id):
-                        try:
-                            await _send_voice_reply(message.channel, reply)
-                        except Exception as ve:
-                            logger.warning(f"Voice reply failed: {ve}")
-                except Exception as e:
-                    logger.error(f"Photo handling error: {e}", exc_info=True)
-                    await message.channel.send(
-                        f"Sorry, I couldn't process that image -- {type(e).__name__}: {e}"
-                    )
-
-        elif ext in GENETIC_EXTENSIONS:
-            if not _check_rate_limit(message):
-                _audit("rate_limited", **_user_ctx(message))
-                await message.channel.send(
-                    f"You've reached the limit of {RATE_LIMIT_PER_HOUR} messages per hour. "
-                    "Please try again later."
-                )
-                return
-
-            has_genetic_file = True
-            file_bytes = await attachment.read()
-
-            # File size check
-            if len(file_bytes) > MAX_UPLOAD_BYTES:
-                await message.channel.send(
-                    f"File too large ({len(file_bytes) / (1024*1024):.1f} MB). "
-                    f"Maximum: {MAX_UPLOAD_BYTES / (1024*1024):.0f} MB."
-                )
-                return
-
-            filename = _sanitize_filename(attachment.filename)
-            tmp_path = Path(tempfile.gettempdir()) / f"roboterri_{filename}"
-            tmp_path.write_bytes(file_bytes)
-            logger.info(f"Document received: {filename} ({len(file_bytes)} bytes)")
-            _audit("document", **_user_ctx(message), filename=filename,
-                   size_bytes=len(file_bytes))
-
-            _received_files[message.channel.id] = {
-                "path": str(tmp_path), "filename": filename,
-            }
-
-            # Auto-create a patient profile for follow-up skill calls
-            profile_path = None
-            try:
-                upload_proc = await asyncio.create_subprocess_exec(
-                    sys.executable, str(CLAWBIO_PY), "upload",
-                    "--input", str(tmp_path),
-                    stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.PIPE,
-                )
-                up_stdout, up_stderr = await asyncio.wait_for(
-                    upload_proc.communicate(), timeout=30,
-                )
-                up_out = up_stdout.decode(errors="replace")
-                # Parse profile path from upload output
-                for line in up_out.splitlines():
-                    if "profile" in line.lower() and ("/" in line or "\\" in line):
-                        for token in line.split():
-                            if token.endswith(".json"):
-                                profile_path = token
-                                break
-                if profile_path:
-                    _received_files[message.channel.id]["profile_path"] = profile_path
-                    logger.info(f"Auto-created profile: {profile_path}")
-                else:
-                    logger.info(f"Profile upload output (no path parsed): {up_out[:200]}")
-            except Exception as prof_err:
-                logger.warning(f"Auto-profile creation failed (non-fatal): {prof_err}")
-
-            caption = message.content.strip() if message.content else ""
-            parts_list = [f"[Document received: {filename} ({len(file_bytes)} bytes)]"]
-            if profile_path:
-                parts_list.append(f"[Patient profile auto-created: {profile_path}]")
-            if caption:
-                parts_list.append(caption)
-            else:
-                profile_note = (
-                    " A patient profile has been created -- the user can now ask "
-                    "follow-up questions like 'what am I at risk for?' (prs) or "
-                    "'show my full profile' (profile) without re-uploading."
-                ) if profile_path else ""
-                parts_list.append(
-                    "The user sent this genetic data file. Detect the file type and "
-                    "run the appropriate ClawBio skill using mode='file'. For .txt "
-                    "files (23andMe format) use pharmgx. For .csv (AncestryDNA) use "
-                    "pharmgx. For .vcf use equity. For .fastq use metagenomics. "
-                    "If unsure, use skill='auto'." + profile_note
-                )
-
-            async with message.channel.typing():
-                try:
-                    reply = await llm_tool_loop(
-                        message.channel.id, "\n\n".join(parts_list)
-                    )
-                    if _pending_text:
-                        reply = "\n\n".join(_pending_text)
-                        _pending_text.clear()
-                    await send_long_message(message.channel, reply)
-                    await drain_pending_media(message.channel)
-                    # Voice reply if toggled on
-                    if _voice_enabled.get(message.author.id):
-                        try:
-                            await _send_voice_reply(message.channel, reply)
-                        except Exception as ve:
-                            logger.warning(f"Voice reply failed: {ve}")
-                except Exception as e:
-                    logger.error(f"Document handling error: {e}", exc_info=True)
-                    await message.channel.send(
-                        f"Sorry, I couldn't process that document -- {type(e).__name__}: {e}"
-                    )
-
-    # If there were only attachments (no text beyond them), we're done
-    if has_image or has_genetic_file:
-        return
-
-    # ----- Plain text messages ----- #
-
-    if not content:
-        return
-
-    # Ignore bot commands already handled above
-    if content.startswith("!"):
-        return
-
-    if not _check_rate_limit(message):
-        _audit("rate_limited", **_user_ctx(message))
-        await message.channel.send(
-            f"You've reached the limit of {RATE_LIMIT_PER_HOUR} messages per hour. "
-            "Please try again later."
-        )
-        return
-
-    user_text = content
-    logger.info(f"Message from {message.author.display_name}: {user_text[:100]}")
-    _audit("message", **_user_ctx(message), text_preview=user_text[:200],
-           text_len=len(user_text))
-
-    async with message.channel.typing():
+        # Regular text message -> LLM
         try:
-            reply = await llm_tool_loop(message.channel.id, user_text)
+            reply = run_async(llm_tool_loop(phone, text))
             if _pending_text:
                 reply = "\n\n".join(_pending_text)
                 _pending_text.clear()
-            await send_long_message(message.channel, reply)
-            await drain_pending_media(message.channel)
-            # Voice reply if toggled on
-            if _voice_enabled.get(message.author.id):
+            wa_send_text(phone, reply)
+            drain_pending_media(phone)
+            if _voice_enabled.get(phone):
                 try:
-                    await _send_voice_reply(message.channel, reply)
+                    run_async(_send_voice_reply(phone, reply))
                 except Exception as ve:
                     logger.warning(f"Voice reply failed: {ve}")
         except Exception as e:
             logger.error(f"Error handling message: {e}", exc_info=True)
-            await message.channel.send(
-                f"Sorry, something went wrong -- {type(e).__name__}: {e}"
+            wa_send_text(phone, f"Sorry, something went wrong -- {type(e).__name__}: {e}")
+
+    # ----- Image messages ----- #
+    elif msg_type == "image":
+        image_info = msg.get("image", {})
+        media_id = image_info.get("id", "")
+        caption = image_info.get("caption", "")
+        mime_type = image_info.get("mime_type", "image/jpeg")
+
+        logger.info(f"Image from {phone}: media_id={media_id}, mime={mime_type}")
+
+        img_bytes = wa_download_media(media_id)
+        if not img_bytes:
+            wa_send_text(phone, "Sorry, I couldn't download that image. Please try again.")
+            return
+
+        if len(img_bytes) > MAX_PHOTO_BYTES:
+            wa_send_text(phone,
+                f"Photo too large ({len(img_bytes) / (1024*1024):.1f} MB). "
+                f"Maximum: {MAX_PHOTO_BYTES / (1024*1024):.0f} MB.")
+            return
+
+        _audit("photo", phone=phone, size_bytes=len(img_bytes), media_type=mime_type)
+
+        img_b64 = base64.standard_b64encode(img_bytes).decode("ascii")
+
+        filename = _sanitize_filename(f"whatsapp_image_{datetime.now().strftime('%H%M%S')}.jpg")
+        tmp_path = Path(tempfile.gettempdir()) / f"roboterri_{filename}"
+        tmp_path.write_bytes(img_bytes)
+        _received_files[phone] = {"path": str(tmp_path), "filename": filename}
+
+        content_blocks = [
+            {
+                "type": "image",
+                "source": {
+                    "type": "base64",
+                    "media_type": mime_type,
+                    "data": img_b64,
+                },
+            },
+        ]
+        if caption:
+            content_blocks.append({"type": "text", "text": caption})
+        else:
+            content_blocks.append({
+                "type": "text",
+                "text": (
+                    "[Image sent without caption. Look at this image. "
+                    "If it shows a medication, drug packaging, pill bottle, blister pack, or "
+                    "any pharmaceutical product: immediately identify the drug name and any "
+                    "visible dosage, then call the clawbio tool with skill='drugphoto', "
+                    "mode='demo', drug_name=<identified drug>, and visible_dose=<dose if readable>. "
+                    "Do NOT ask what is needed -- just run the lookup automatically. "
+                    "If the image is not a medication, describe what you see and ask if "
+                    "anything specific is needed.]"
+                ),
+            })
+
+        try:
+            reply = run_async(llm_tool_loop(phone, content_blocks))
+            if _pending_text:
+                reply = "\n\n".join(_pending_text)
+                _pending_text.clear()
+            wa_send_text(phone, reply)
+            if _voice_enabled.get(phone):
+                try:
+                    run_async(_send_voice_reply(phone, reply))
+                except Exception as ve:
+                    logger.warning(f"Voice reply failed: {ve}")
+        except Exception as e:
+            logger.error(f"Photo handling error: {e}", exc_info=True)
+            wa_send_text(phone, f"Sorry, I couldn't process that image -- {type(e).__name__}: {e}")
+
+    # ----- Document messages ----- #
+    elif msg_type == "document":
+        doc_info = msg.get("document", {})
+        media_id = doc_info.get("id", "")
+        filename = _sanitize_filename(doc_info.get("filename", "document"))
+        mime_type = doc_info.get("mime_type", "application/octet-stream")
+        caption = doc_info.get("caption", "")
+
+        logger.info(f"Document from {phone}: {filename}, mime={mime_type}")
+
+        # Check if it's an image sent as document
+        ext = Path(filename).suffix.lower()
+        if mime_type.startswith("image/") or ext in IMAGE_EXTENSIONS:
+            # Treat as image
+            img_bytes = wa_download_media(media_id)
+            if not img_bytes:
+                wa_send_text(phone, "Sorry, I couldn't download that file. Please try again.")
+                return
+            if len(img_bytes) > MAX_PHOTO_BYTES:
+                wa_send_text(phone,
+                    f"Photo too large ({len(img_bytes) / (1024*1024):.1f} MB). "
+                    f"Maximum: {MAX_PHOTO_BYTES / (1024*1024):.0f} MB.")
+                return
+
+            img_b64 = base64.standard_b64encode(img_bytes).decode("ascii")
+            tmp_path = Path(tempfile.gettempdir()) / f"roboterri_{filename}"
+            tmp_path.write_bytes(img_bytes)
+            _received_files[phone] = {"path": str(tmp_path), "filename": filename}
+
+            content_blocks = [
+                {"type": "image", "source": {"type": "base64", "media_type": mime_type, "data": img_b64}},
+                {"type": "text", "text": caption or "[Image sent as document. Identify any medication and run drugphoto if applicable.]"},
+            ]
+            try:
+                reply = run_async(llm_tool_loop(phone, content_blocks))
+                if _pending_text:
+                    reply = "\n\n".join(_pending_text)
+                    _pending_text.clear()
+                wa_send_text(phone, reply)
+            except Exception as e:
+                wa_send_text(phone, f"Sorry, couldn't process that image -- {e}")
+            return
+
+        # Genetic data file
+        if ext not in GENETIC_EXTENSIONS:
+            wa_send_text(phone,
+                f"I received '{filename}' but I can only process genetic data files "
+                "(.txt, .csv, .vcf, .fastq, .fq, .gz). Please send the correct file type.")
+            return
+
+        file_bytes = wa_download_media(media_id)
+        if not file_bytes:
+            wa_send_text(phone, "Sorry, I couldn't download that file. Please try again.")
+            return
+
+        if len(file_bytes) > MAX_UPLOAD_BYTES:
+            wa_send_text(phone,
+                f"File too large ({len(file_bytes) / (1024*1024):.1f} MB). "
+                f"Maximum: {MAX_UPLOAD_BYTES / (1024*1024):.0f} MB.")
+            return
+
+        _audit("document", phone=phone, filename=filename, size_bytes=len(file_bytes))
+
+        tmp_path = Path(tempfile.gettempdir()) / f"roboterri_{filename}"
+        tmp_path.write_bytes(file_bytes)
+        _received_files[phone] = {"path": str(tmp_path), "filename": filename}
+
+        # Auto-create patient profile
+        profile_path = None
+        try:
+            import subprocess
+            upload_proc = subprocess.run(
+                [sys.executable, str(CLAWBIO_PY), "upload", "--input", str(tmp_path)],
+                capture_output=True, text=True, timeout=30,
             )
+            for line in upload_proc.stdout.splitlines():
+                if "profile" in line.lower() and ("/" in line or "\\" in line):
+                    for token in line.split():
+                        if token.endswith(".json"):
+                            profile_path = token
+                            break
+            if profile_path:
+                _received_files[phone]["profile_path"] = profile_path
+                logger.info(f"Auto-created profile: {profile_path}")
+        except Exception as prof_err:
+            logger.warning(f"Auto-profile creation failed (non-fatal): {prof_err}")
+
+        parts = [f"[Document received: {filename} ({len(file_bytes)} bytes)]"]
+        if profile_path:
+            parts.append(f"[Patient profile auto-created: {profile_path}]")
+        if caption:
+            parts.append(caption)
+        else:
+            profile_note = (
+                " A patient profile has been created -- the user can now ask "
+                "follow-up questions like 'what am I at risk for?' (prs) or "
+                "'show my full profile' (profile) without re-uploading."
+            ) if profile_path else ""
+            parts.append(
+                "The user sent this genetic data file. Detect the file type and "
+                "run the appropriate ClawBio skill using mode='file'. For .txt "
+                "files (23andMe format) use pharmgx. For .csv (AncestryDNA) use "
+                "pharmgx. For .vcf use equity. For .fastq use metagenomics. "
+                "If unsure, use skill='auto'." + profile_note
+            )
+
+        try:
+            reply = run_async(llm_tool_loop(phone, "\n\n".join(parts)))
+            if _pending_text:
+                reply = "\n\n".join(_pending_text)
+                _pending_text.clear()
+            wa_send_text(phone, reply)
+            drain_pending_media(phone)
+            if _voice_enabled.get(phone):
+                try:
+                    run_async(_send_voice_reply(phone, reply))
+                except Exception as ve:
+                    logger.warning(f"Voice reply failed: {ve}")
+        except Exception as e:
+            logger.error(f"Document handling error: {e}", exc_info=True)
+            wa_send_text(phone, f"Sorry, couldn't process that document -- {e}")
+
+    else:
+        logger.info(f"Unsupported message type from {phone}: {msg_type}")
+
+
+# --------------------------------------------------------------------------- #
+# Flask webhook
+# --------------------------------------------------------------------------- #
+
+app = Flask(__name__)
+
+
+@app.route("/webhook", methods=["GET"])
+def webhook_verify():
+    """Handle WhatsApp webhook verification (GET)."""
+    mode = request.args.get("hub.mode", "")
+    token = request.args.get("hub.verify_token", "")
+    challenge = request.args.get("hub.challenge", "")
+
+    if mode == "subscribe" and token == WHATSAPP_VERIFY_TOKEN:
+        logger.info("Webhook verified successfully")
+        return challenge, 200
+    else:
+        logger.warning(f"Webhook verification failed: mode={mode}, token={token[:10]}...")
+        return "Forbidden", 403
+
+
+@app.route("/webhook", methods=["POST"])
+def webhook_receive():
+    """Handle incoming WhatsApp messages (POST)."""
+    data = request.get_json(silent=True)
+    if not data:
+        return "OK", 200
+
+    try:
+        for entry in data.get("entry", []):
+            for change in entry.get("changes", []):
+                value = change.get("value", {})
+                messages = value.get("messages", [])
+                for msg in messages:
+                    phone = msg.get("from", "")
+                    if phone:
+                        # Process in a thread to avoid blocking the webhook
+                        threading.Thread(
+                            target=handle_whatsapp_message,
+                            args=(phone, msg),
+                            daemon=True,
+                        ).start()
+    except Exception as e:
+        logger.error(f"Webhook processing error: {e}", exc_info=True)
+
+    # Always return 200 quickly to avoid WhatsApp retries
+    return "OK", 200
+
+
+@app.route("/health", methods=["GET"])
+def health_check():
+    """Health check endpoint."""
+    uptime_secs = int(time.time() - BOT_START_TIME)
+    return jsonify({
+        "status": "ok",
+        "uptime_seconds": uptime_secs,
+        "model": CLAWBIO_MODEL,
+        "platform": "whatsapp",
+    })
 
 
 # --------------------------------------------------------------------------- #
@@ -1597,15 +1673,21 @@ async def on_message(message: discord.Message):
 
 def main():
     """Start the bot."""
-    logger.info(f"Starting RoboTerri Discord bot (model: {CLAWBIO_MODEL})")
+    logger.info(f"Starting RoboTerri WhatsApp bot (model: {CLAWBIO_MODEL})")
     logger.info(f"ClawBio directory: {CLAWBIO_DIR}")
+    logger.info(f"Webhook port: {WHATSAPP_PORT}")
     if LLM_BASE_URL:
         logger.info(f"LLM base URL: {LLM_BASE_URL}")
-    logger.info(f"Admin user ID: {ADMIN_USER_ID or 'not set (public mode)'}")
+    logger.info(f"Admin phone: {WHATSAPP_ADMIN_PHONE or 'not set (public mode)'}")
     logger.info(f"Rate limit: {RATE_LIMIT_PER_HOUR} msgs/hour per user (0=unlimited)")
-    logger.info(f"Authorised channels: {[ch['name'] for ch in CHANNELS]} ({len(CHANNELS)})")
+    _audit("bot_start", model=CLAWBIO_MODEL,
+           admin_phone=WHATSAPP_ADMIN_PHONE or None, rate_limit=RATE_LIMIT_PER_HOUR)
 
-    client.run(DISCORD_BOT_TOKEN, log_handler=None)
+    print(f"RoboTerri WhatsApp bot is running on port {WHATSAPP_PORT}. Press Ctrl+C to stop.")
+    print(f"Webhook URL: http://localhost:{WHATSAPP_PORT}/webhook")
+    print("Use ngrok or a reverse proxy to expose this endpoint to the internet.")
+
+    app.run(host="0.0.0.0", port=WHATSAPP_PORT, debug=False)
 
 
 if __name__ == "__main__":
