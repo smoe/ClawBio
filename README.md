@@ -294,14 +294,19 @@ python -m pytest
 ## Run via Telegram (RoboTerri)
 
 <p align="center">
+  <img src="img/terri_attwood_avatar_top_left.png" alt="RoboTerri" width="250">
+  <br><em>RoboTerri — ClawBio's Telegram agent, inspired by <a href="https://en.wikipedia.org/wiki/Teresa_Attwood">Prof. Teresa K. Attwood</a></em>
+</p>
+
+ClawBio skills are available through **RoboTerri**, a public Telegram bot running against a real human genome ([Manuel Corpas](https://en.wikipedia.org/wiki/Manuel_Corpas), CC0 public domain). Named after [Prof. Teresa K. Attwood](https://en.wikipedia.org/wiki/Teresa_Attwood) — a pioneer of bioinformatics education, founding Chair of GOBLET, and winner of the 2021 ISCB Outstanding Contributions Award.
+
+<p align="center">
   <a href="https://t.me/RoboTerri_bot">
     <img src="demo/roboterri-preview.gif" alt="RoboTerri Telegram bot demo — querying a real genome" width="300">
   </a>
   <br>
   <a href="https://t.me/RoboTerri_bot"><strong>Try RoboTerri now — no install needed →</strong></a>
 </p>
-
-ClawBio skills are available through **RoboTerri**, a public Telegram bot running against a real human genome ([Manuel Corpas](https://en.wikipedia.org/wiki/Manuel_Corpas), CC0 public domain). Named after [Prof. Teresa K. Attwood](https://en.wikipedia.org/wiki/Teresa_Attwood) — a pioneer of bioinformatics education, founding Chair of GOBLET, and winner of the 2021 ISCB Outstanding Contributions Award.
 
 Ask it anything:
 
