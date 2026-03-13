@@ -419,6 +419,24 @@ SKILLS = {
             "--min-samples",
         },
     },
+    "methylation": {
+        "script": SKILLS_DIR / "methylation-clock" / "methylation_clock.py",
+        "demo_args": [
+            "--input",
+            str(CLAWBIO_DIR / "pyaging_data" / "GSE139307_small.pkl"),
+        ],
+        "description": "Epigenetic age from methylation clocks (PyAging)",
+        "no_input_required": True,
+        "allowed_extra_flags": {
+            "--geo-id",
+            "--clocks",
+            "--metadata-cols",
+            "--imputer-strategy",
+            "--skip-epicv2-aggregation",
+            "--verbose",
+        },
+        "accepts_genotypes": False,
+    },
 }
 
 # Skills that run in the full-profile pipeline (order matters)
@@ -826,6 +844,12 @@ def main():
     run_parser.add_argument("--genes", default=None, help="Comma-separated gene symbols for ClinPGx")
     run_parser.add_argument("--rsid", default=None, help="rsID for GWAS lookup skill (e.g. rs3798220)")
     run_parser.add_argument("--skip", default=None, help="Comma-separated API names to skip (gwas-lookup skill)")
+    run_parser.add_argument("--geo-id", default=None, help="GEO accession for methylation clock skill")
+    run_parser.add_argument("--clocks", default=None, help="Comma-separated clock names for methylation skill")
+    run_parser.add_argument("--metadata-cols", default=None, help="Comma-separated metadata columns for methylation skill")
+    run_parser.add_argument("--imputer-strategy", default=None, help="Imputer strategy for methylation skill")
+    run_parser.add_argument("--skip-epicv2-aggregation", action="store_true", help="Skip EPICv2 probe aggregation")
+    run_parser.add_argument("--verbose", action="store_true", help="Verbose output for skill backends")
     run_parser.add_argument("--method", default=None, help="Embedding backend (scrna-embedding skill)")
     run_parser.add_argument("--layer", default=None, help="Raw-count layer for `.h5ad` input (scrna-embedding skill)")
     run_parser.add_argument("--batch-key", default=None, help="obs batch column for integration (scrna-embedding skill)")
@@ -939,6 +963,18 @@ def main():
             extra.extend(["--rsid", args.rsid])
         if getattr(args, "skip", None):
             extra.extend(["--skip", args.skip])
+        if getattr(args, "geo_id", None):
+            extra.extend(["--geo-id", args.geo_id])
+        if getattr(args, "clocks", None):
+            extra.extend(["--clocks", args.clocks])
+        if getattr(args, "metadata_cols", None):
+            extra.extend(["--metadata-cols", args.metadata_cols])
+        if getattr(args, "imputer_strategy", None):
+            extra.extend(["--imputer-strategy", args.imputer_strategy])
+        if getattr(args, "skip_epicv2_aggregation", False):
+            extra.append("--skip-epicv2-aggregation")
+        if getattr(args, "verbose", False):
+            extra.append("--verbose")
         if getattr(args, "method", None):
             extra.extend(["--method", args.method])
         if getattr(args, "layer", None):
