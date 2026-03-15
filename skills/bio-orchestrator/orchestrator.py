@@ -56,6 +56,13 @@ EXTENSION_MAP: dict[str, str] = {
 }
 
 KEYWORD_MAP: dict[str, str] = {
+    "illumina connected analytics": "illumina-bridge",
+    "connected analytics": "illumina-bridge",
+    "sample sheet": "illumina-bridge",
+    "samplesheet": "illumina-bridge",
+    "basespace": "illumina-bridge",
+    "dragen": "illumina-bridge",
+    "illumina": "illumina-bridge",
     "scvi": "scrna-embedding",
     "batch correction": "scrna-embedding",
     "batch integration": "scrna-embedding",
@@ -165,13 +172,38 @@ SCRNA_EMBEDDING_TERMS = (
     "batch integration",
 )
 
+ILLUMINA_SAMPLE_SHEET_NAMES = {"samplesheet.csv"}
+ILLUMINA_VCF_SUFFIXES = {".vcf", ".vcf.gz"}
+
 
 # ---------------------------------------------------------------------------
 # Utility functions
 # ---------------------------------------------------------------------------
 
+def _looks_like_illumina_bundle(filepath: Path) -> bool:
+    """Heuristic detection for DRAGEN-style export directories."""
+
+    if not filepath.exists() or not filepath.is_dir():
+        return False
+    has_sample_sheet = any(
+        candidate.is_file() and candidate.name.lower() in ILLUMINA_SAMPLE_SHEET_NAMES
+        for candidate in filepath.rglob("*")
+    )
+    has_vcf = any(
+        candidate.is_file() and "".join(candidate.suffixes).lower() in ILLUMINA_VCF_SUFFIXES
+        for candidate in filepath.rglob("*")
+    )
+    return has_sample_sheet and has_vcf
+
+
 def detect_skill_from_file(filepath: Path) -> str | None:
     """Determine which skill handles a given file based on extension."""
+    if filepath.is_dir():
+        if _looks_like_illumina_bundle(filepath):
+            return "illumina-bridge"
+        return None
+    if filepath.name.lower() in ILLUMINA_SAMPLE_SHEET_NAMES:
+        return "illumina-bridge"
     suffixes = "".join(filepath.suffixes)  # handles .vcf.gz
     if filepath.suffix.lower() in {".csv", ".tsv"}:
         inferred = detect_skill_from_tabular_header(filepath)
@@ -258,6 +290,11 @@ def detect_skill_with_hint_from_query(query: str) -> tuple[str | None, str]:
 
 def detect_routing_hint_for_file(filepath: Path) -> str:
     """Return a routing hint for special-case input files."""
+    if filepath.is_dir() and _looks_like_illumina_bundle(filepath):
+        return (
+            "Detected an Illumina-style export bundle. Use `illumina-bridge` to "
+            "normalize SampleSheet, VCF, and QC metrics before downstream analysis."
+        )
     if filepath.name == "integrated.h5ad":
         return (
             "Detected `integrated.h5ad`. This is usually the downstream artifact from "
@@ -356,6 +393,7 @@ SKILL_REGISTRY_MAP: dict[str, str] = {
     "clinpgx": "clinpgx",
     "gwas-lookup": "gwas",
     "profile-report": "profile",
+    "illumina-bridge": "illumina",
     "data-extractor": "data-extract",
     "rnaseq-de": "rnaseq",
 }

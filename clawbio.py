@@ -403,6 +403,20 @@ SKILLS = {
         "no_input_required": True,
         "accepts_genotypes": False,
     },
+    "illumina": {
+        "script": SKILLS_DIR / "illumina-bridge" / "illumina_bridge.py",
+        "demo_args": ["--demo"],
+        "description": "Illumina / DRAGEN bundle import and metadata normalization",
+        "allowed_extra_flags": {
+            "--vcf",
+            "--qc",
+            "--sample-sheet",
+            "--metadata-provider",
+            "--ica-project-id",
+            "--ica-run-id",
+        },
+        "accepts_genotypes": False,
+    },
     "data-extract": {
         "script": SKILLS_DIR / "data-extractor" / "data_extractor.py",
         "demo_args": ["--demo"],
@@ -832,6 +846,16 @@ def main():
     run_parser.add_argument("--genes", default=None, help="Comma-separated gene symbols for ClinPGx")
     run_parser.add_argument("--rsid", default=None, help="rsID for GWAS lookup skill (e.g. rs3798220)")
     run_parser.add_argument("--skip", default=None, help="Comma-separated API names to skip (gwas-lookup skill)")
+    run_parser.add_argument("--vcf", default=None, help="Explicit VCF override for illumina skill")
+    run_parser.add_argument("--qc", default=None, help="Explicit QC metrics override for illumina skill")
+    run_parser.add_argument("--sample-sheet", default=None, help="Explicit SampleSheet override for illumina skill")
+    run_parser.add_argument(
+        "--metadata-provider",
+        default=None,
+        help="Optional metadata provider for illumina skill (none or ica)",
+    )
+    run_parser.add_argument("--ica-project-id", default=None, help="ICA project ID for illumina skill")
+    run_parser.add_argument("--ica-run-id", default=None, help="ICA analysis/run ID for illumina skill")
     run_parser.add_argument("--method", default=None, help="Embedding backend (scrna-embedding skill)")
     run_parser.add_argument("--layer", default=None, help="Raw-count layer for `.h5ad` input (scrna-embedding skill)")
     run_parser.add_argument("--batch-key", default=None, help="obs batch column for integration (scrna-embedding skill)")
@@ -976,6 +1000,18 @@ def main():
             extra.extend(["--rsid", args.rsid])
         if getattr(args, "skip", None):
             extra.extend(["--skip", args.skip])
+        if getattr(args, "vcf", None):
+            extra.extend(["--vcf", args.vcf])
+        if getattr(args, "qc", None):
+            extra.extend(["--qc", args.qc])
+        if getattr(args, "sample_sheet", None):
+            extra.extend(["--sample-sheet", args.sample_sheet])
+        if getattr(args, "metadata_provider", None):
+            extra.extend(["--metadata-provider", args.metadata_provider])
+        if getattr(args, "ica_project_id", None):
+            extra.extend(["--ica-project-id", args.ica_project_id])
+        if getattr(args, "ica_run_id", None):
+            extra.extend(["--ica-run-id", args.ica_run_id])
         if getattr(args, "method", None):
             extra.extend(["--method", args.method])
         if getattr(args, "layer", None):

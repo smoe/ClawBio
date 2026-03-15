@@ -1,7 +1,7 @@
 {
   "version": "1.0.0",
   "generated_by": "scripts/generate_catalog.py",
-  "skill_count": 25,
+  "skill_count": 26,
   "galaxy_tool_count": 8182,
   "skills": [
     {
@@ -314,6 +314,28 @@
         "profile-report",
         "gwas-lookup"
       ]
+    },
+    {
+      "name": "illumina-bridge",
+      "cli_alias": null,
+      "description": "Import DRAGEN-exported Illumina result bundles into ClawBio for local tertiary analysis and downstream routing.",
+      "version": "0.1.0",
+      "status": "planned",
+      "has_script": true,
+      "has_tests": true,
+      "has_demo": true,
+      "demo_command": "python skills/illumina-bridge/illumina_bridge.py --demo",
+      "dependencies": [],
+      "tags": [
+        "illumina",
+        "dragen",
+        "ica",
+        "tertiary-analysis",
+        "vcf",
+        "genomics"
+      ],
+      "trigger_keywords": [],
+      "chaining_partners": []
     },
     {
       "name": "labstep",
