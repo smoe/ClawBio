@@ -454,6 +454,8 @@ SKILLS = {
             "--imputer-strategy",
             "--skip-epicv2-aggregation",
             "--verbose",
+        },
+    },
     "diffviz": {
         "script": SKILLS_DIR / "diff-visualizer" / "diff_visualizer.py",
         "demo_args": ["--demo"],
