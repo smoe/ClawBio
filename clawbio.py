@@ -590,6 +590,7 @@ SKILLS = {
             "--pipelines", "--samples", "--projects", "--executions",
             "--organisms", "--sample-types", "--data",
             "--pipeline", "--sample", "--execution",
+            "--metadata-attributes",
             "--pipeline-detail", "--sample-detail", "--execution-detail",
             "--search", "--upload-sample", "--name", "--sample-type",
             "--reads1", "--reads2", "--organism", "--project",
@@ -1194,6 +1195,7 @@ def main():
     run_parser.add_argument("--organisms", action="store_true", help="List organisms (flow skill)")
     run_parser.add_argument("--sample-types", action="store_true", help="List sample types (flow skill)")
     run_parser.add_argument("--data", action="store_true", help="List data (flow skill)")
+    run_parser.add_argument("--metadata-attributes", action="store_true", help="List metadata attributes (flow skill)")
     run_parser.add_argument("--upload-sample", action="store_true", help="Upload a sample (flow skill)")
     run_parser.add_argument("--name", default=None, help="Sample name for upload (flow skill)")
     run_parser.add_argument("--reads1", default=None, help="First reads file (flow skill)")
@@ -1422,6 +1424,8 @@ def main():
             extra.append("--sample-types")
         if getattr(args, "data", False):
             extra.append("--data")
+        if getattr(args, "metadata_attributes", False):
+            extra.append("--metadata-attributes")
         if getattr(args, "upload_sample", False):
             extra.append("--upload-sample")
         if getattr(args, "name", None):

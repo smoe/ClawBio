@@ -764,6 +764,19 @@ def write_report(output_dir: Path, action: str, data: dict) -> Path:
         for d in data.get("data_items", data.get("data", [])):
             lines.append(f"| {d.get('id', '?')} | {d.get('filename', d.get('name', '?'))} | {d.get('filetype', '?')} | {d.get('size', '?')} |")
 
+    elif action == "metadata_attributes":
+        lines.append("## Metadata Attributes")
+        lines.append("")
+        lines.append("| Name | Identifier | Required | Has Options | User Terms |")
+        lines.append("|------|------------|----------|-------------|------------|")
+        for attr in data.get("attributes", []):
+            name = attr.get("name", "?")
+            ident = attr.get("identifier", "?")
+            req = "yes" if attr.get("required") else "no"
+            opts = "yes" if attr.get("has_options") else "no"
+            user = "yes" if attr.get("allow_user_terms") else "no"
+            lines.append(f"| {name} | {ident} | {req} | {opts} | {user} |")
+
     elif action == "execution":
         lines.append("## Execution Details")
         lines.append("")
@@ -793,6 +806,21 @@ def write_report(output_dir: Path, action: str, data: dict) -> Path:
         org = data.get("organism", {})
         org_name = org.get("name", org) if isinstance(org, dict) else str(org or "N/A")
         lines.append(f"- **Organism**: {org_name}")
+        metadata = data.get("metadata", {})
+        if metadata:
+            lines.append("")
+            lines.append("### Metadata")
+            lines.append("")
+            lines.append("| Attribute | Value | Annotation |")
+            lines.append("|-----------|-------|------------|")
+            for attr_id, attr_data in metadata.items():
+                if isinstance(attr_data, dict):
+                    label = attr_data.get("attribute_name", attr_id)
+                    value = attr_data.get("value") or "—"
+                    annotation = attr_data.get("annotation") or ""
+                    lines.append(f"| {label} | {value} | {annotation} |")
+                else:
+                    lines.append(f"| {attr_id} | {attr_data} | |")
 
     elif action == "search":
         lines.append("## Search Results")
@@ -939,6 +967,7 @@ def main():
     list_group.add_argument("--organisms", action="store_true", help="List available organisms")
     list_group.add_argument("--sample-types", action="store_true", help="List available sample types")
     list_group.add_argument("--data", action="store_true", help="List owned data")
+    list_group.add_argument("--metadata-attributes", action="store_true", help="List metadata attributes schema")
 
     # Detail (single resource)
     detail_group = parser.add_argument_group("details")
@@ -978,6 +1007,7 @@ def main():
     has_action = any([
         args.demo, args.login, args.pipelines, args.samples, args.projects,
         args.executions, args.organisms, args.sample_types, args.data,
+        args.metadata_attributes,
         args.pipeline, args.sample, args.execution, args.search,
         args.upload_sample, args.run_pipeline,
     ])
@@ -1179,6 +1209,39 @@ def main():
             write_reproducibility(output_dir, "python skills/flow-bio/flow_bio.py --sample-types", base_url)
         return
 
+    if args.metadata_attributes:
+        attributes = client.get_metadata_attributes()
+        if args.json:
+            _print_json(attributes)
+        else:
+            print(f"\nMetadata Attributes ({len(attributes)} defined):\n")
+            for attr in attributes:
+                ident = attr.get("identifier", "?")
+                name = attr.get("name", "?")
+                desc = attr.get("description", "")
+                required = attr.get("required", False)
+                allow_user = attr.get("allow_user_terms", False)
+                has_opts = attr.get("has_options", False)
+                req_label = " [required]" if required else ""
+                print(f"  {name}{req_label}")
+                print(f"    identifier: {ident}")
+                if desc:
+                    print(f"    description: {desc[:80]}")
+                print(f"    has_options: {has_opts}  allow_user_terms: {allow_user}")
+                # Show sample type requirements if present
+                links = attr.get("sample_type_links", [])
+                if links:
+                    req_types = [lk.get("sample_type_name", "?") for lk in links if lk.get("required")]
+                    if req_types:
+                        print(f"    required for: {', '.join(req_types)}")
+                print()
+        if output_dir:
+            output_dir.mkdir(parents=True, exist_ok=True)
+            write_result_json(output_dir, "metadata_attributes", {"attributes": attributes, "flow_url": base_url})
+            write_report(output_dir, "metadata_attributes", {"attributes": attributes, "flow_url": base_url})
+            write_reproducibility(output_dir, "python skills/flow-bio/flow_bio.py --metadata-attributes", base_url)
+        return
+
     if args.data:
         try:
             data_items = client.get_data_owned()
@@ -1239,9 +1302,23 @@ def main():
         else:
             print(f"\nSample: {data.get('name', '?')}")
             print(f"ID: {data.get('id', '?')}")
-            print(f"Type: {data.get('sample_type', data.get('sampleType', '?'))}")
+            stype = data.get("sample_type", data.get("sampleType", {}))
+            stype_name = stype.get("name", stype) if isinstance(stype, dict) else str(stype)
+            print(f"Type: {stype_name}")
             org = data.get("organism", {})
             print(f"Organism: {org.get('name', '?') if isinstance(org, dict) else org}")
+            metadata = data.get("metadata", {})
+            if metadata:
+                print(f"\nMetadata ({len(metadata)} attributes):")
+                for attr_id, attr_data in metadata.items():
+                    if isinstance(attr_data, dict):
+                        label = attr_data.get("attribute_name", attr_id)
+                        value = attr_data.get("value") or "—"
+                        annotation = attr_data.get("annotation")
+                        suffix = f" ({annotation})" if annotation else ""
+                        print(f"  {label:30s} {value}{suffix}")
+                    else:
+                        print(f"  {attr_id:30s} {attr_data}")
             print()
         if output_dir:
             output_dir.mkdir(parents=True, exist_ok=True)
