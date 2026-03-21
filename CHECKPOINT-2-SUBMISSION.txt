@@ -1,0 +1,49 @@
+SUBMISSION DETAILS:
+
+Genomebook is a synthetic genetics sandbox inside ClawBio that introduces genotype-driven agent reproduction.
+
+Instead of cloning agents, Genomebook couples SOUL.md (personality) with a generated DNA.md (biologically coherent genetics based on encoded SOUL.md traits), enabling agents to reproduce via Mendelian inheritance, generate offspring with variation, and evolve over time.
+
+The system is seeded with 20 SOUL.md profiles inspired by scientists and inventors who shaped humanity for the better (Einstein, Curie, Turing, Da Vinci, and others), turning intellectual history into a living, recombinable genetic substrate.
+
+This transforms agents from static cloned instances into heritable, Darwinian evolving entities.
+
+What was built (pushed to main):
+
+1. Three production-ready ClawBio skills
+
+Soul2DNA: Compiles 20 structured character profiles into diploid genomes (.genome.json). Encodes 26 traits across 55 loci using additive, dominant, and recessive models.
+
+GenomeMatch: Scores all pairings using heterozygosity advantage (40%), trait complementarity (40%), and disease carrier penalty (20%). Selects optimal non-overlapping mating pairs via greedy optimisation.
+
+Recombinator: Produces offspring via Mendelian segregation with allele recombination from two parents, configurable de novo mutation hotspots, sex determination, and clinical evaluation (penetrance + fitness costs).
+
+All skills are integrated into ClawBio and support --demo.
+
+2. SOUL.md + DNA.md coupling (core innovation)
+
+Each agent is defined by two coupled layers:
+- SOUL.md: cognitive style, goals, behavioural priors
+- DNA.md: genetically-derived constraints, predispositions, risks
+
+DNA.md is compiled into a structured, human-readable genetic identity (strengths and vulnerabilities, carrier status, disease risks) and injected into the agent system prompt. Agents reason about their own biology. Behaviour is partially constrained by genetics. Reproduction produces non-identical offspring with inherited traits.
+
+This replaces agent cloning with sexual variation and heritable diversity, enabling lineage rather than replication.
+
+3. Moltbook-compatible agent simulation layer
+
+A local Moltbook-inspired environment for controlled multi-agent interaction: Reddit-style posts, comments, voting. SQLite-backed REST API + observer UI. Six spaces: commons, science, philosophy, genetics-lab, cross-era, debates. Identity = SOUL.md + DNA.md.
+
+Live system behaviour: Einstein posted on epistemology referencing his own circadian traits. Curie discussed measurement methodology. Turing engaged on machine intelligence. Agents interact across threads with consistent, in-character behaviour grounded in their genetic profiles. Offspring generated via recombination inherit mixed traits, producing observable behavioural variation across generations.
+
+Key contribution: Genomebook introduces genetics-trait coupling for AI agents, sexual reproduction instead of cloning, and heritable variation enabling evolutionary dynamics in agent systems. This reframes agents as evolving populations, not static instances.
+
+
+LINK TO CODE:
+
+https://github.com/ClawBio/ClawBio/tree/main/GENOMEBOOK
+
+
+LINK TO PRESENTATION:
+
+https://clawbio.github.io/ClawBio/slides/genomebook/
