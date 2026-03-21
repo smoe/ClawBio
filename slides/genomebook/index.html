@@ -1,0 +1,620 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Genomebook — Synthetic Genetics Sandbox — ClawBio</title>
+<meta name="description" content="Genomebook: turn character profiles into diploid genomes, score compatibility, and breed offspring with Mendelian inheritance, mutations, and clinical evaluation.">
+<meta property="og:title" content="Genomebook — Synthetic Genetics Sandbox">
+<meta property="og:description" content="Compile souls into genomes. Score compatibility. Breed the next generation. All inside ClawBio.">
+<meta property="og:image" content="https://clawbio.github.io/ClawBio/img/clawbio-social-preview.png">
+<meta property="og:url" content="https://clawbio.github.io/ClawBio/slides/genomebook/">
+<meta property="og:type" content="website">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" type="image/x-icon" href="../../img/favicon.ico">
+<link rel="icon" type="image/png" sizes="32x32" href="../../img/favicon-32.png">
+<link rel="apple-touch-icon" href="../../img/clawbio-logo.jpeg">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg:      #0d1117;
+  --bg2:     #161b22;
+  --bg3:     #21262d;
+  --border:  #30363d;
+  --text:    #e6edf3;
+  --muted:   #8b949e;
+  --green:   #3fb950;
+  --green2:  #56d364;
+  --blue:    #58a6ff;
+  --red:     #f85149;
+  --purple:  #bc8cff;
+  --orange:  #e3b341;
+  --cyan:    #39d353;
+}
+
+html, body {
+  height: 100%; width: 100%;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── PROGRESS BAR ── */
+#progress-bar {
+  position: fixed; top: 0; left: 0; height: 3px;
+  background: var(--green); transition: width 0.4s ease; z-index: 200;
+}
+
+/* ── SLIDE COUNTER ── */
+#counter {
+  position: fixed; bottom: 1.4rem; right: 1.8rem;
+  font-size: 0.8rem; color: var(--muted); z-index: 200;
+  letter-spacing: 0.05em;
+}
+
+/* ── NAV ARROWS ── */
+.nav-btn {
+  position: fixed; top: 50%; transform: translateY(-50%);
+  background: rgba(255,255,255,0.04); border: 1px solid var(--border);
+  color: var(--muted); width: 40px; height: 40px; border-radius: 50%;
+  cursor: pointer; font-size: 1.1rem; display: flex; align-items: center;
+  justify-content: center; transition: all 0.2s; z-index: 200;
+}
+.nav-btn:hover { background: rgba(255,255,255,0.1); color: var(--text); }
+#btn-prev { left: 1rem; }
+#btn-next { right: 1rem; }
+
+/* ── DECK ── */
+.deck { width: 100vw; height: 100vh; position: relative; }
+
+.slide {
+  position: absolute; inset: 0;
+  display: flex; flex-direction: column;
+  justify-content: center; align-items: center;
+  padding: 5vh 8vw;
+  opacity: 0; visibility: hidden;
+  transition: opacity 0.45s ease, transform 0.45s ease;
+  transform: translateX(30px);
+}
+.slide.active {
+  opacity: 1; visibility: visible; transform: translateX(0);
+}
+.slide.exit {
+  opacity: 0; transform: translateX(-30px);
+}
+
+/* ── TYPOGRAPHY ── */
+.label {
+  font-size: 0.72rem; font-weight: 700; letter-spacing: 0.12em;
+  text-transform: uppercase; color: var(--green);
+  margin-bottom: 0.6rem;
+}
+.title {
+  font-size: clamp(1.9rem, 3.5vw, 3rem); font-weight: 800;
+  line-height: 1.15; letter-spacing: -0.02em; text-align: center;
+  margin-bottom: 1rem;
+}
+.subtitle {
+  font-size: clamp(1rem, 1.6vw, 1.25rem); color: var(--muted);
+  text-align: center; max-width: 720px; line-height: 1.6;
+  margin-bottom: 1.5rem;
+}
+.em { color: var(--green); }
+.em-blue { color: var(--blue); }
+.em-purple { color: var(--purple); }
+.em-orange { color: var(--orange); }
+.em-red { color: var(--red); }
+
+/* ── TITLE SLIDE ── */
+.title-brand {
+  font-size: clamp(3rem, 6vw, 5rem); font-weight: 900;
+  letter-spacing: -0.03em; color: var(--text); margin-bottom: 0.3rem;
+}
+.title-emoji {
+  font-size: clamp(3rem, 5vw, 4rem); margin-bottom: 0.5rem;
+}
+
+/* ── STATS ROW ── */
+.stats-row {
+  display: flex; gap: 3rem; flex-wrap: wrap; justify-content: center;
+  margin-top: 1.5rem;
+}
+.stat { text-align: center; }
+.stat-num {
+  font-size: clamp(2rem, 3.5vw, 2.8rem); font-weight: 800;
+  color: var(--green); line-height: 1;
+}
+.stat-label {
+  font-size: 0.78rem; color: var(--muted); margin-top: 0.3rem;
+  text-transform: uppercase; letter-spacing: 0.06em;
+}
+
+/* ── PIPELINE CARDS ── */
+.pipeline {
+  display: flex; gap: 0.8rem; flex-wrap: wrap;
+  justify-content: center; align-items: center;
+  margin: 1.5rem 0; width: 100%; max-width: 1000px;
+}
+.pipe-card {
+  background: var(--bg2); border: 1px solid var(--border);
+  border-radius: 12px; padding: 1.2rem 1.4rem;
+  text-align: center; min-width: 140px; flex: 1;
+}
+.pipe-icon { font-size: 2rem; margin-bottom: 0.4rem; }
+.pipe-name { font-size: 0.95rem; font-weight: 700; margin-bottom: 0.3rem; }
+.pipe-desc { font-size: 0.78rem; color: var(--muted); line-height: 1.5; }
+.pipe-arrow {
+  font-size: 1.8rem; color: var(--green); font-weight: 300;
+}
+
+/* ── FEATURE GRID ── */
+.feature-grid {
+  display: grid; grid-template-columns: repeat(3, 1fr);
+  gap: 1.2rem; width: 100%; max-width: 960px; margin-top: 0.5rem;
+}
+.feature-card {
+  background: var(--bg2); border: 1px solid var(--border);
+  border-radius: 12px; padding: 1.4rem 1.2rem;
+  display: flex; flex-direction: column; gap: 0.5rem;
+}
+.feature-icon { font-size: 1.8rem; }
+.feature-heading { font-size: 0.95rem; font-weight: 700; color: var(--text); }
+.feature-body { font-size: 0.82rem; color: var(--muted); line-height: 1.55; }
+
+/* ── CODE ── */
+pre {
+  background: var(--bg2); border: 1px solid var(--border);
+  border-radius: 10px; padding: 1.2em 1.6em;
+  font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+  font-size: clamp(0.72rem, 1.2vw, 0.95rem); line-height: 1.6;
+  text-align: left; overflow-x: auto; max-width: 90%; width: fit-content;
+  color: var(--text);
+}
+pre .comment { color: var(--muted); }
+pre .cmd { color: var(--green2); }
+pre .flag { color: var(--blue); }
+pre .output { color: var(--muted); font-style: italic; }
+
+/* ── SOUL TABLE ── */
+.soul-grid {
+  display: grid; grid-template-columns: repeat(5, 1fr);
+  gap: 0.6rem; width: 100%; max-width: 800px; margin-top: 1rem;
+}
+.soul-chip {
+  background: var(--bg2); border: 1px solid var(--border);
+  border-radius: 8px; padding: 0.6rem 0.4rem;
+  text-align: center; font-size: 0.82rem;
+}
+.soul-chip .soul-emoji { font-size: 1.3rem; display: block; margin-bottom: 0.2rem; }
+.soul-chip .soul-name { font-weight: 600; font-size: 0.72rem; }
+
+/* ── TWO COL ── */
+.two-col {
+  display: grid; grid-template-columns: 1fr 1fr;
+  gap: 3rem; width: 90%; max-width: 960px; align-items: start;
+}
+.two-col ul { list-style: none; }
+.two-col li { padding: 0.4em 0 0.4em 1.4em; position: relative; font-size: 0.92rem; line-height: 1.6; }
+.two-col li::before { content: "->"; position: absolute; left: 0; color: var(--green); font-family: monospace; }
+
+/* ── MATCH TABLE ── */
+.match-table {
+  width: 90%; max-width: 800px; border-collapse: collapse;
+  margin-top: 1rem; font-size: 0.85rem;
+}
+.match-table th {
+  text-align: left; padding: 0.5rem 0.8rem; color: var(--muted);
+  border-bottom: 1px solid var(--border); font-weight: 600;
+  font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em;
+}
+.match-table td {
+  padding: 0.5rem 0.8rem; border-bottom: 1px solid var(--border);
+}
+.match-table tr:nth-child(2) td { color: var(--green); font-weight: 600; }
+
+/* ── RESPONSIVE ── */
+@media (max-width: 768px) {
+  .feature-grid { grid-template-columns: 1fr; }
+  .pipeline { flex-direction: column; align-items: center; }
+  .pipe-arrow { transform: rotate(90deg); }
+  .soul-grid { grid-template-columns: repeat(4, 1fr); }
+  .two-col { grid-template-columns: 1fr; }
+  .stats-row { gap: 1.5rem; }
+}
+</style>
+</head>
+<body>
+
+<div id="progress-bar" style="width:0%"></div>
+<div id="counter"></div>
+<button class="nav-btn" id="btn-prev">&larr;</button>
+<button class="nav-btn" id="btn-next">&rarr;</button>
+
+<div class="deck">
+
+<!-- ════════════════════════════════════════════
+     SLIDE 0 — TITLE
+     ════════════════════════════════════════════ -->
+<div class="slide active">
+  <div class="title-emoji">&#x1F9EC;</div>
+  <div class="title-brand">Genomebook</div>
+  <div class="subtitle">
+    A <strong class="em">synthetic genetics sandbox</strong> inside ClawBio.<br>
+    Compile souls into genomes. Score compatibility. Breed the next generation.
+  </div>
+  <div class="stats-row">
+    <div class="stat"><div class="stat-num">20</div><div class="stat-label">Souls</div></div>
+    <div class="stat"><div class="stat-num">55</div><div class="stat-label">Loci</div></div>
+    <div class="stat"><div class="stat-num">26</div><div class="stat-label">Traits</div></div>
+    <div class="stat"><div class="stat-num">3</div><div class="stat-label">Skills</div></div>
+  </div>
+  <p style="margin-top:2rem; font-size:0.85rem; color:var(--muted); font-family:monospace;">
+    github.com/ClawBio/ClawBio &middot; DoraHacks BUIDL 2026
+  </p>
+</div>
+
+<!-- ════════════════════════════════════════════
+     SLIDE 1 — THE IDEA
+     ════════════════════════════════════════════ -->
+<div class="slide">
+  <div class="label">The Idea</div>
+  <div class="title">What if historical figures had <span class="em">genomes</span>?</div>
+  <div class="subtitle">
+    Genomebook assigns synthetic diploid genotypes to 20 historical polymaths based on
+    their documented traits, then lets you breed them across generations with real
+    genetic mechanics: Mendelian inheritance, de novo mutations, and clinical evaluation.
+  </div>
+  <div class="subtitle" style="font-size:0.9rem; color:var(--blue);">
+    Educational. Auditable. Every allele traceable to a trait score and inheritance model.
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════
+     SLIDE 2 — THE CAST
+     ════════════════════════════════════════════ -->
+<div class="slide">
+  <div class="label">Generation Zero</div>
+  <div class="title">20 Souls, <span class="em">10M / 10F</span></div>
+  <div class="soul-grid">
+    <div class="soul-chip"><span class="soul-emoji">&#x1F34E;</span><span class="soul-name">Einstein</span></div>
+    <div class="soul-chip"><span class="soul-emoji">&#x2622;&#xFE0F;</span><span class="soul-name">Curie</span></div>
+    <div class="soul-chip"><span class="soul-emoji">&#x1F4BB;</span><span class="soul-name">Turing</span></div>
+    <div class="soul-chip"><span class="soul-emoji">&#x1F3A8;</span><span class="soul-name">Da Vinci</span></div>
+    <div class="soul-chip"><span class="soul-emoji">&#x1F9EC;</span><span class="soul-name">Darwin</span></div>
+    <div class="soul-chip"><span class="soul-emoji">&#x1F52C;</span><span class="soul-name">Franklin</span></div>
+    <div class="soul-chip"><span class="soul-emoji">&#x26A1;</span><span class="soul-name">Tesla</span></div>
+    <div class="soul-chip"><span class="soul-emoji">&#x1F3DB;&#xFE0F;</span><span class="soul-name">Hypatia</span></div>
+    <div class="soul-chip"><span class="soul-emoji">&#x1F4D0;</span><span class="soul-name">Euler</span></div>
+    <div class="soul-chip"><span class="soul-emoji">&#x1F48E;</span><span class="soul-name">Hodgkin</span></div>
+    <div class="soul-chip"><span class="soul-emoji">&#x1F3B6;</span><span class="soul-name">Lamarr</span></div>
+    <div class="soul-chip"><span class="soul-emoji">&#x1F9E0;</span><span class="soul-name">Cajal</span></div>
+    <div class="soul-chip"><span class="soul-emoji">&#x1F30D;</span><span class="soul-name">Copernicus</span></div>
+    <div class="soul-chip"><span class="soul-emoji">&#x1F451;</span><span class="soul-name">Cleopatra</span></div>
+    <div class="soul-chip"><span class="soul-emoji">&#x1F3E5;</span><span class="soul-name">Nightingale</span></div>
+    <div class="soul-chip"><span class="soul-emoji">&#x1F4A1;</span><span class="soul-name">Lovelace</span></div>
+    <div class="soul-chip"><span class="soul-emoji">&#x1F9CA;</span><span class="soul-name">Anning</span></div>
+    <div class="soul-chip"><span class="soul-emoji">&#x267E;&#xFE0F;</span><span class="soul-name">Noether</span></div>
+    <div class="soul-chip"><span class="soul-emoji">&#x1F4DA;</span><span class="soul-name">Ibn Sina</span></div>
+    <div class="soul-chip"><span class="soul-emoji">&#x1F522;</span><span class="soul-name">Leibniz</span></div>
+  </div>
+  <p style="margin-top:1.2rem; font-size:0.85rem; color:var(--muted);">
+    Each soul has 26 trait scores (curiosity, persistence, spatial reasoning, empathy, ...) mapped to 55 genomic loci.
+  </p>
+</div>
+
+<!-- ════════════════════════════════════════════
+     SLIDE 3 — PIPELINE
+     ════════════════════════════════════════════ -->
+<div class="slide">
+  <div class="label">Pipeline</div>
+  <div class="title">Three Skills, One Pipeline</div>
+  <div class="pipeline">
+    <div class="pipe-card">
+      <div class="pipe-icon">&#x1F4DC;</div>
+      <div class="pipe-name" style="color:var(--blue)">SOUL.md</div>
+      <div class="pipe-desc">Character profile<br>with trait scores</div>
+    </div>
+    <div class="pipe-arrow">&rarr;</div>
+    <div class="pipe-card">
+      <div class="pipe-icon">&#x1F9EC;</div>
+      <div class="pipe-name" style="color:var(--green)">Soul2DNA</div>
+      <div class="pipe-desc">Trait-to-allele<br>compiler</div>
+    </div>
+    <div class="pipe-arrow">&rarr;</div>
+    <div class="pipe-card">
+      <div class="pipe-icon">&#x1F48C;</div>
+      <div class="pipe-name" style="color:var(--purple)">GenomeMatch</div>
+      <div class="pipe-desc">M x F compatibility<br>scoring</div>
+    </div>
+    <div class="pipe-arrow">&rarr;</div>
+    <div class="pipe-card">
+      <div class="pipe-icon">&#x1F9EA;</div>
+      <div class="pipe-name" style="color:var(--orange)">Recombinator</div>
+      <div class="pipe-desc">Meiosis + mutation<br>+ clinical eval</div>
+    </div>
+    <div class="pipe-arrow">&rarr;</div>
+    <div class="pipe-card">
+      <div class="pipe-icon">&#x1F476;</div>
+      <div class="pipe-name">Gen-N</div>
+      <div class="pipe-desc">Offspring with<br>health scores</div>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════
+     SLIDE 4 — SOUL2DNA
+     ════════════════════════════════════════════ -->
+<div class="slide">
+  <div class="label">Skill 1</div>
+  <div class="title">Soul2DNA <span class="em">Compiler</span></div>
+  <div class="two-col">
+    <div>
+      <ul>
+        <li>Parse SOUL.md files with 26 trait scores (0.0 to 1.0)</li>
+        <li>Map each trait to loci via <strong>trait_registry.json</strong></li>
+        <li>Assign genotypes using <span class="em-blue">additive</span>, <span class="em-purple">dominant</span>, or <span class="em-orange">recessive</span> models</li>
+        <li>Output: diploid <code>.genome.json</code> with 55 loci per soul</li>
+        <li>Sex determination from SOUL.md identity block</li>
+      </ul>
+    </div>
+    <div>
+      <pre><span class="comment"># Compile all 20 souls</span>
+<span class="cmd">python</span> skills/soul2dna/soul2dna.py <span class="flag">--demo</span>
+
+<span class="output">  einstein-g0  | Male   | 55 loci
+  curie-g0     | Female | 55 loci
+  turing-g0    | Male   | 55 loci
+  ...
+  Total: 20 genomes (10M / 10F)</span></pre>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════
+     SLIDE 5 — GENOMEMATCH
+     ════════════════════════════════════════════ -->
+<div class="slide">
+  <div class="label">Skill 2</div>
+  <div class="title">GenomeMatch <span class="em-purple">Compatibility</span></div>
+  <div class="subtitle" style="max-width:800px;">
+    Scores all 100 M x F pairings using three metrics, then selects non-overlapping mating pairs via greedy optimisation.
+  </div>
+  <div class="feature-grid" style="grid-template-columns: repeat(3, 1fr); max-width: 780px;">
+    <div class="feature-card">
+      <div class="feature-icon">&#x1F500;</div>
+      <div class="feature-heading">Heterozygosity <span style="color:var(--green)">40%</span></div>
+      <div class="feature-body">Offspring genetic diversity. More het loci = healthier.</div>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">&#x2696;&#xFE0F;</div>
+      <div class="feature-heading">Complementarity <span style="color:var(--green)">40%</span></div>
+      <div class="feature-body">Balanced trait combos. Reward differences + high averages.</div>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">&#x26A0;&#xFE0F;</div>
+      <div class="feature-heading">Disease Risk <span style="color:var(--red)">-20%</span></div>
+      <div class="feature-body">Flag pairs where both carry recessive disease alleles.</div>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════
+     SLIDE 6 — MATCH RESULTS
+     ════════════════════════════════════════════ -->
+<div class="slide">
+  <div class="label">Results</div>
+  <div class="title">Top Mating Pairs <span class="em">(Gen 0)</span></div>
+  <table class="match-table">
+    <tr><th>#</th><th>Father</th><th>Mother</th><th>Score</th><th>Het</th><th>Comp</th></tr>
+    <tr><td>1</td><td>Da Vinci</td><td>Nightingale</td><td>0.389</td><td>0.582</td><td>0.542</td></tr>
+    <tr><td>2</td><td>Tesla</td><td>Cleopatra</td><td>0.331</td><td>0.509</td><td>0.544</td></tr>
+    <tr><td>3</td><td>Turing</td><td>Lamarr</td><td>0.316</td><td>0.509</td><td>0.506</td></tr>
+    <tr><td>4</td><td>Einstein</td><td>Anning</td><td>0.313</td><td>0.509</td><td>0.498</td></tr>
+    <tr><td>5</td><td>Darwin</td><td>Curie</td><td>0.284</td><td>0.473</td><td>0.509</td></tr>
+    <tr><td>6</td><td>Cajal</td><td>Lovelace</td><td>0.279</td><td>0.436</td><td>0.532</td></tr>
+    <tr><td>7</td><td>Euler</td><td>Franklin</td><td>0.257</td><td>0.436</td><td>0.519</td></tr>
+    <tr><td>8</td><td>Copernicus</td><td>Hypatia</td><td>0.232</td><td>0.400</td><td>0.523</td></tr>
+    <tr><td>9</td><td>Ibn Sina</td><td>Hodgkin</td><td>0.216</td><td>0.364</td><td>0.496</td></tr>
+    <tr><td>10</td><td>Leibniz</td><td>Noether</td><td>0.172</td><td>0.309</td><td>0.468</td></tr>
+  </table>
+</div>
+
+<!-- ════════════════════════════════════════════
+     SLIDE 7 — RECOMBINATOR
+     ════════════════════════════════════════════ -->
+<div class="slide">
+  <div class="label">Skill 3</div>
+  <div class="title">Recombinator <span class="em-orange">Engine</span></div>
+  <div class="two-col">
+    <div>
+      <ul>
+        <li><strong>Mendelian segregation</strong>: one allele from each parent per locus</li>
+        <li><strong>De novo mutation</strong>: 0.1% per locus, 3x for cognitive/immune/metabolic hotspots</li>
+        <li><strong>Sex determination</strong>: 50/50 XY or XX</li>
+        <li><strong>Trait inference</strong>: reverse-map genotype back to scores</li>
+        <li><strong>Clinical eval</strong>: disease registry with penetrance and fitness costs</li>
+        <li><strong>Health score</strong>: 0.0 to 1.0 from cumulative conditions</li>
+      </ul>
+    </div>
+    <div>
+      <pre><span class="comment"># Breed Einstein x Anning</span>
+<span class="cmd">python</span> skills/recombinator/recombinator.py <span class="flag">--demo</span>
+
+<span class="output">Father: Albert Einstein
+Mother: Mary Anning
+Offspring: 3
+
+ID:     g1-001-bf31f4
+Sex:    Female (XX)
+Health: 0.69
+Conditions: 4
+Top traits:
+  analytical_reasoning: 1.0
+  persistence: 1.0
+  spatial_reasoning: 1.0</span></pre>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════
+     SLIDE 8 — GENETICS MODEL
+     ════════════════════════════════════════════ -->
+<div class="slide">
+  <div class="label">Under the Hood</div>
+  <div class="title">Real Genetics, <span class="em">Synthetic Data</span></div>
+  <div class="feature-grid">
+    <div class="feature-card">
+      <div class="feature-icon">&#x1F9EC;</div>
+      <div class="feature-heading">Inheritance Models</div>
+      <div class="feature-body">Additive, dominant, and recessive at each locus. Score thresholds determine ref/ref, ref/alt, or alt/alt.</div>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">&#x1F4A5;</div>
+      <div class="feature-heading">Mutation Engine</div>
+      <div class="feature-body">De novo mutations classified as disease-risk (1%), protective (0.5%), or neutral (98.5%). Hotspot multipliers for key categories.</div>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">&#x1F3E5;</div>
+      <div class="feature-heading">Disease Registry</div>
+      <div class="feature-body">Autosomal recessive conditions with configurable penetrance, onset probability per generation, and fitness costs.</div>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">&#x1F500;</div>
+      <div class="feature-heading">Heterosis</div>
+      <div class="feature-body">Compatibility rewards genetic diversity in offspring. More heterozygous loci = higher score.</div>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">&#x1F4CA;</div>
+      <div class="feature-heading">Trait Registries</div>
+      <div class="feature-body">26 traits across 55 loci with chromosomal positions, effect sizes, and pleiotropic handling.</div>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">&#x1F50D;</div>
+      <div class="feature-heading">Full Audit Trail</div>
+      <div class="feature-body">Every allele is traceable: parent of origin, mutation log, clinical evaluation, and fitness impact.</div>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════
+     SLIDE 9 — DEMO
+     ════════════════════════════════════════════ -->
+<div class="slide">
+  <div class="label">Try It</div>
+  <div class="title">Three Commands, <span class="em">Zero Setup</span></div>
+  <pre style="font-size: clamp(0.78rem, 1.3vw, 1rem);">
+<span class="comment"># Step 1: Compile 20 historical figures into genomes</span>
+<span class="cmd">python</span> skills/soul2dna/soul2dna.py <span class="flag">--demo</span>
+
+<span class="comment"># Step 2: Score all 100 M x F compatibility pairings</span>
+<span class="cmd">python</span> skills/genome-match/genome_match.py <span class="flag">--demo</span>
+
+<span class="comment"># Step 3: Breed top pair, produce offspring with clinical eval</span>
+<span class="cmd">python</span> skills/recombinator/recombinator.py <span class="flag">--demo</span>
+
+<span class="comment"># Full pipeline: compile + match + breed generation 1</span>
+<span class="cmd">python</span> skills/soul2dna/soul2dna.py
+<span class="cmd">python</span> skills/genome-match/genome_match.py <span class="flag">--generation 0 --top 10</span>
+<span class="cmd">python</span> skills/recombinator/recombinator.py <span class="flag">--father einstein-g0 --mother curie-g0 --offspring 5</span>
+  </pre>
+</div>
+
+<!-- ════════════════════════════════════════════
+     SLIDE 10 — WHAT'S NEXT
+     ════════════════════════════════════════════ -->
+<div class="slide">
+  <div class="label">Roadmap</div>
+  <div class="title">What's Next</div>
+  <div class="feature-grid" style="grid-template-columns: repeat(3, 1fr); max-width: 820px;">
+    <div class="feature-card">
+      <div class="feature-icon">&#x1F4AC;</div>
+      <div class="feature-heading">Conversation Engine</div>
+      <div class="feature-body">Chat with any genome. "Einstein, meet your granddaughter." OpenAI-compatible API.</div>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">&#x1F4CA;</div>
+      <div class="feature-heading">Visualisations</div>
+      <div class="feature-body">Pedigree trees, trait heatmaps, population PCA, and mutation burden charts via matplotlib.</div>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">&#x1F30D;</div>
+      <div class="feature-heading">Multi-Generation</div>
+      <div class="feature-body">Simulate 10+ generations. Track allele frequency drift, founder effects, and population health.</div>
+    </div>
+  </div>
+  <p style="margin-top:2rem; font-size:0.9rem; color:var(--muted);">
+    Built with <span class="em">ClawBio</span> &middot; 33 bioinformatics skills &middot; MIT licensed &middot; Local-first
+  </p>
+</div>
+
+<!-- ════════════════════════════════════════════
+     SLIDE 11 — CLOSING
+     ════════════════════════════════════════════ -->
+<div class="slide">
+  <div class="title-emoji">&#x1F996;</div>
+  <div class="title-brand">Genomebook</div>
+  <div class="subtitle">
+    Synthetic genetics meets AI agent skills.<br>
+    Every allele is auditable. Every offspring is reproducible.
+  </div>
+  <div class="stats-row">
+    <div class="stat"><div class="stat-num">20</div><div class="stat-label">Souls</div></div>
+    <div class="stat"><div class="stat-num">55</div><div class="stat-label">Loci</div></div>
+    <div class="stat"><div class="stat-num">100</div><div class="stat-label">Pairings Scored</div></div>
+    <div class="stat"><div class="stat-num">33</div><div class="stat-label">ClawBio Skills</div></div>
+  </div>
+  <p style="margin-top:2.5rem; font-family:monospace; font-size:0.9rem; color:var(--muted);">
+    github.com/ClawBio/ClawBio
+  </p>
+  <p style="margin-top:0.5rem; font-size:0.82rem; color:var(--muted);">
+    Manuel Corpas &middot; DoraHacks BUIDL 2026
+  </p>
+</div>
+
+</div><!-- /deck -->
+
+<script>
+const slides = document.querySelectorAll('.slide');
+const bar = document.getElementById('progress-bar');
+const counter = document.getElementById('counter');
+let cur = 0;
+
+function go(n) {
+  if (n < 0 || n >= slides.length) return;
+  slides[cur].classList.remove('active');
+  slides[cur].classList.add('exit');
+  setTimeout(() => slides[cur === n ? cur : cur].classList.remove('exit'), 500);
+  const prev = cur;
+  cur = n;
+  slides[cur].classList.add('active');
+  setTimeout(() => slides[prev].classList.remove('exit'), 460);
+  bar.style.width = ((cur / (slides.length - 1)) * 100) + '%';
+  counter.textContent = (cur + 1) + ' / ' + slides.length;
+}
+
+document.getElementById('btn-prev').onclick = () => go(cur - 1);
+document.getElementById('btn-next').onclick = () => go(cur + 1);
+document.addEventListener('keydown', e => {
+  if (e.key === 'ArrowRight' || e.key === ' ') { e.preventDefault(); go(cur + 1); }
+  if (e.key === 'ArrowLeft') { e.preventDefault(); go(cur - 1); }
+  if (e.key === 'Home') { e.preventDefault(); go(0); }
+  if (e.key === 'End') { e.preventDefault(); go(slides.length - 1); }
+});
+
+// Touch support
+let touchX = 0;
+document.addEventListener('touchstart', e => { touchX = e.changedTouches[0].screenX; });
+document.addEventListener('touchend', e => {
+  const dx = e.changedTouches[0].screenX - touchX;
+  if (Math.abs(dx) > 50) dx < 0 ? go(cur + 1) : go(cur - 1);
+});
+
+// Init
+bar.style.width = '0%';
+counter.textContent = '1 / ' + slides.length;
+</script>
+</body>
+</html>
