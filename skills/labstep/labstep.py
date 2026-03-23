@@ -210,7 +210,7 @@ _PROJECT_ROOT = SKILL_DIR.parent.parent
 
 
 def _write_reproducibility(output_dir: Path, label: str) -> None:
-    """Write environment.yml to output_dir/reproducibility/."""
+    """Write environment.yml and commands.sh to output_dir/reproducibility/."""
     repro = output_dir / "reproducibility"
     repro.mkdir(parents=True, exist_ok=True)
 
@@ -228,6 +228,16 @@ def _write_reproducibility(output_dir: Path, label: str) -> None:
         f"# Skill: labstep  label: {label}\n"
     )
     (repro / "environment.yml").write_text(env_yml, encoding="utf-8")
+
+    import shlex
+    cmd = " ".join(shlex.quote(a) for a in sys.argv)
+    commands_sh = (
+        "#!/usr/bin/env bash\n"
+        f"# Generated: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}\n"
+        f"# Skill: labstep  label: {label}\n\n"
+        f"{cmd}\n"
+    )
+    (repro / "commands.sh").write_text(commands_sh, encoding="utf-8")
 
 
 def _write_output(output_dir: Path, content: str, label: str = "report") -> None:
