@@ -209,12 +209,34 @@ def format_inventory(data: dict, search: str | None = None) -> str:
 _PROJECT_ROOT = SKILL_DIR.parent.parent
 
 
+def _write_reproducibility(output_dir: Path, label: str) -> None:
+    """Write environment.yml to output_dir/reproducibility/."""
+    repro = output_dir / "reproducibility"
+    repro.mkdir(parents=True, exist_ok=True)
+
+    env_yml = (
+        "name: clawbio-labstep\n"
+        "channels:\n"
+        "  - conda-forge\n"
+        "  - defaults\n"
+        "dependencies:\n"
+        "  - python>=3.10\n"
+        "  - pip\n"
+        "  - pip:\n"
+        "    - labstep>=3.0\n"
+        f"# Generated: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}\n"
+        f"# Skill: labstep  label: {label}\n"
+    )
+    (repro / "environment.yml").write_text(env_yml, encoding="utf-8")
+
+
 def _write_output(output_dir: Path, content: str, label: str = "report") -> None:
     """Write markdown content to output_dir/report.md and a result.json envelope."""
     output_dir.mkdir(parents=True, exist_ok=True)
     report_path = output_dir / "report.md"
     report_path.write_text(content, encoding="utf-8")
     print(f"Report written to {report_path}")
+    _write_reproducibility(output_dir, label)
 
     # Standardised result.json — use common helper when available
     try:
