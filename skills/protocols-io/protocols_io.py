@@ -19,6 +19,7 @@ from __future__ import annotations
 import argparse
 import collections
 import getpass
+import hashlib
 import itertools
 import json
 import os
@@ -552,6 +553,69 @@ def run_demo() -> None:
 # ---------------------------------------------------------------------------
 
 
+def _sha256(path: Path) -> str:
+    """Return hex SHA-256 digest of a file, reading in 8 KB chunks."""
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(8192), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def _write_reproducibility(args: argparse.Namespace, output_dir: Path, output_files: list[Path]) -> None:
+    """Write commands.sh, checksums.sha256, and environment.yml to output_dir/reproducibility/.
+
+    Follows the AGENTS.md convention of placing reproducibility artefacts in a
+    dedicated subdirectory so they don't clutter the primary outputs.
+    """
+    repro_dir = output_dir / "reproducibility"
+    repro_dir.mkdir(parents=True, exist_ok=True)
+
+    # Reconstruct canonical CLI from parsed args (non-default values only)
+    def _sq(val: str) -> str:
+        return "'" + str(val).replace("'", "'\\''") + "'"
+
+    parts = ["python skills/protocols-io/protocols_io.py"]
+    if getattr(args, "demo", False):
+        parts.append("--demo")
+    elif getattr(args, "search", None):
+        parts.append(f"--search {_sq(args.search)}")
+        if getattr(args, "filter", "public") != "public":
+            parts.append(f"--filter {args.filter}")
+        if getattr(args, "peer_reviewed", None):
+            parts.append("--peer-reviewed")
+        if getattr(args, "published_on", None):
+            parts.append(f"--published-on {_sq(args.published_on)}")
+        if getattr(args, "page_size", 10) != 10:
+            parts.append(f"--page-size {args.page_size}")
+        if getattr(args, "page", 1) != 1:
+            parts.append(f"--page {args.page}")
+    elif getattr(args, "protocol", None):
+        parts.append(f"--protocol {_sq(args.protocol)}")
+    elif getattr(args, "steps", None):
+        parts.append(f"--steps {_sq(args.steps)}")
+    if getattr(args, "output", None):
+        parts.append(f"--output {_sq(args.output)}")
+
+    (repro_dir / "commands.sh").write_text(" \\\n  ".join(parts) + "\n")
+
+    # SHA-256 checksums in standard sha256sum format
+    lines = [f"{_sha256(p)}  {p.name}" for p in output_files if p.exists()]
+    (repro_dir / "checksums.sha256").write_text("\n".join(lines) + "\n")
+
+    # Conda environment spec
+    (repro_dir / "environment.yml").write_text(
+        "name: clawbio-protocols-io\n"
+        "channels:\n"
+        "  - conda-forge\n"
+        "dependencies:\n"
+        "  - python>=3.11\n"
+        "  - pip\n"
+        "  - pip:\n"
+        "    - requests\n"
+    )
+
+
 def _slugify(text: str, max_len: int = 60) -> str:
     """Turn a title or query into a safe filename slug."""
     import re
@@ -727,6 +791,7 @@ def main() -> None:
                 result = download_protocol_pdf(uri, out_path)
             if not result:
                 sys.exit(1)
+            _write_reproducibility(args, output_dir, [out_path])
             return
 
         report = format_protocol_detail(data)
