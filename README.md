@@ -13,7 +13,7 @@
   <a href="https://github.com/ClawBio/ClawBio/actions/workflows/ci.yml"><img src="https://github.com/ClawBio/ClawBio/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="#quick-start"><img src="https://img.shields.io/badge/python-3.10+-blue?logo=python&logoColor=white" alt="Python 3.10+"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="MIT License"></a>
-  <a href="https://clawhub.ai"><img src="https://img.shields.io/badge/ClawHub-24_skills-orange" alt="ClawHub Skills"></a>
+  <a href="https://clawhub.ai"><img src="https://img.shields.io/badge/ClawHub-39_skills-orange" alt="ClawHub Skills"></a>
   <a href="https://github.com/ClawBio/ClawBio/issues"><img src="https://img.shields.io/github/issues/ClawBio/ClawBio" alt="Open Issues"></a>
   <a href="https://clawbio.github.io/ClawBio/slides/"><img src="https://img.shields.io/badge/slides-London_Bioinformatics_Meetup-purple" alt="Slides"></a>
 </p>
@@ -30,7 +30,7 @@
 
 ## What ClawBio Does Today
 
-**24 skills + 8,000 Galaxy tools. Local-first. No cloud. No guessing.**
+**39 skills + 8,000 Galaxy tools. Local-first. No cloud. No guessing.**
 
 Snap a photo of a medication in Telegram. ClawBio identifies the drug from the packaging, queries your pharmacogenomic profile from [your own genome](docs/demo-genome.md), and returns a personalised dosage card — on your machine, in seconds:
 
@@ -137,14 +137,27 @@ report/
 | [RNA-seq DE](skills/rnaseq-de/) | **MVP** | Bulk/pseudo-bulk differential expression with QC + PCA + contrasts |
 | [Methylation Clock](skills/methylation-clock/) | **MVP** | Epigenetic age from methylation arrays with PyAging clocks |
 | [scRNA Embedding](skills/scrna-embedding/) | **MVP** | scVI latent embedding, batch integration, and stable `integrated.h5ad` export for downstream latent analysis |
-| [VCF Annotator](skills/vcf-annotator/) | Planned | Variant annotation with VEP, ClinVar, gnomAD |
-| [Lit Synthesizer](skills/lit-synthesizer/) | Planned | PubMed/bioRxiv search with LLM summarisation and citation graphs |
 | [scRNA Orchestrator](skills/scrna-orchestrator/) | **MVP** | Scanpy automation: QC, optional doublet detection, clustering, markers, annotation, latent downstream mode, contrastive markers |
-| [Struct Predictor](skills/struct-predictor/) | Planned | AlphaFold/Boltz local structure prediction |
-| [Repro Enforcer](skills/repro-enforcer/) | Planned | Export any analysis as Conda env + Singularity + Nextflow pipeline |
+| [Diff Visualizer](skills/diff-visualizer/) | **MVP** | Rich downstream visualisation for bulk RNA-seq DE and scRNA marker/contrast outputs |
+| [Proteomics DE](skills/proteomics-de/) | **MVP** | Differential expression for label-free quantitative (LFQ) intensity data (MaxQuant, DIA-NN) |
+| [Variant Annotation](skills/variant-annotation/) | **MVP** | Annotate VCF variants with Ensembl VEP REST, ClinVar significance, gnomAD frequencies |
+| [Bioconductor Bridge](skills/bioconductor-bridge/) | **MVP** | Bioconductor package discovery, workflow recommendation, and starter code generation |
+| [Clinical Trial Finder](skills/clinical-trial-finder/) | **MVP** | Find clinical trials for a gene, variant, or condition from ClinicalTrials.gov + EUCTR |
+| [Data Extractor](skills/data-extractor/) | **MVP** | Extract numerical data from scientific figure images using Claude vision + OpenCV calibration |
+| [Illumina Bridge](skills/illumina-bridge/) | **MVP** | Import DRAGEN-exported Illumina result bundles for local tertiary analysis |
+| [Protocols.io](skills/protocols-io/) | **MVP** | Search, browse, and retrieve scientific protocols from protocols.io via REST API |
+| [PubMed Summariser](skills/pubmed-summariser/) | **MVP** | PubMed search with structured research briefings of top recent papers |
+| [Omics Target Evidence Mapper](skills/omics-target-evidence-mapper/) | **MVP** | Aggregate public target-level evidence across omics and translational sources |
+| [Target Validation Scorer](skills/target-validation-scorer/) | **MVP** | Evidence-grounded target validation scoring with GO/NO-GO decisions for drug discovery |
 | [Soul2DNA](skills/soul2dna/) | **MVP** | Compile SOUL.md character profiles into synthetic diploid genomes |
 | [GenomeMatch](skills/genome-match/) | **MVP** | Score genetic compatibility across all M x F pairings per generation |
 | [Recombinator](skills/recombinator/) | **MVP** | Produce offspring via meiotic recombination, mutation, and clinical eval |
+| [VCF Annotator](skills/vcf-annotator/) | Planned | Legacy VCF annotation pipeline (see Variant Annotation for the active skill) |
+| [Lit Synthesizer](skills/lit-synthesizer/) | Planned | PubMed/bioRxiv search with LLM summarisation and citation graphs |
+| [Struct Predictor](skills/struct-predictor/) | Planned | AlphaFold/Boltz local structure prediction |
+| [Repro Enforcer](skills/repro-enforcer/) | Planned | Export any analysis as Conda env + Singularity + Nextflow pipeline |
+| [Labstep](skills/labstep/) | Planned | Labstep electronic lab notebook API integration |
+| [Seq Wrangler](skills/seq-wrangler/) | Planned | Sequence QC, alignment, and BAM processing (FastQC, BWA, SAMtools) |
 
 ---
 
@@ -339,6 +352,10 @@ python clawbio.py run profile --demo             # Unified genomic profile (30s)
 python clawbio.py run galaxy --demo              # Galaxy Bridge FastQC demo (offline)
 python clawbio.py run rnaseq --demo              # RNA-seq DE demo (bulk/pseudo-bulk)
 python clawbio.py run methylation --demo        # Epigenetic methylation clocks via PyAging
+python clawbio.py run protocols-io --demo       # Protocols.io protocol search
+python clawbio.py run variant-annotation --demo # VCF variant annotation (VEP + ClinVar + gnomAD)
+python clawbio.py run proteomics --demo         # Proteomics differential expression
+python clawbio.py run clinical-trial --demo     # Clinical trial finder
 ```
 
 ### Run with your own data
@@ -502,8 +519,8 @@ We want skills from the bioinformatics community. If you work with genomics, pro
 | **claw-acmg** | Clinical variant classification | Clinical genomics |
 | **claw-pathway** | GO/KEGG enrichment | Functional genomics |
 | **claw-phylogenetics** | IQ-TREE/RAxML automation | Evolutionary biology |
-| **claw-proteomics** | MaxQuant/DIA-NN | Proteomics |
 | **claw-spatial** | Visium/MERFISH | Spatial transcriptomics |
+| **claw-long-reads** | ONT/PacBio QC and assembly | Long-read sequencing |
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the submission process and [templates/SKILL-TEMPLATE.md](templates/SKILL-TEMPLATE.md) for the skill template.
 
