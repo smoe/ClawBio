@@ -7,6 +7,7 @@ Consolidates parsers from:
 - skills/equity-scorer/equity_scorer.py (VCF matrix parsing)
 - skills/gwas-prs/gwas_prs.py (PGS scoring file parser)
 
+Supported formats: 23andMe, AncestryDNA, MyHeritage, VCF.
 All parsers return dict[str, GenotypeRecord] for consistency.
 """
 
@@ -126,6 +127,9 @@ def detect_format(filepath: str | Path) -> str:
                 return "23andme"
             if "rsid" in lower and "allele1" in lower:
                 return "ancestry"
+            # MyHeritage: CSV with RSID,CHROMOSOME,POSITION,RESULT header
+            if "rsid" in lower and "chromosome" in lower and "result" in lower:
+                return "myheritage"
             if not line.startswith("#"):
                 break
 
@@ -221,6 +225,60 @@ def parse_ancestry(filepath: str | Path) -> dict[str, GenotypeRecord]:
             pos = int(pos_str)
         except ValueError:
             pos = 0
+
+        genotypes[rsid] = GenotypeRecord(
+            chrom=chrom,
+            pos=pos,
+            genotype=geno,
+            allele1=allele1,
+            allele2=allele2,
+        )
+    return genotypes
+
+
+# ---------------------------------------------------------------------------
+# MyHeritage parser
+# ---------------------------------------------------------------------------
+
+
+def parse_myheritage(filepath: str | Path) -> dict[str, GenotypeRecord]:
+    """Parse MyHeritage DNA raw data file.
+
+    Format: CSV with columns RSID,CHROMOSOME,POSITION,RESULT
+    Comment lines begin with '#'. RESULT is the concatenated genotype (e.g. 'AA').
+
+    Returns {rsid: GenotypeRecord}.
+    """
+    genotypes: dict[str, GenotypeRecord] = {}
+
+    lines = []
+    with open_genetic_file(filepath) as f:
+        for line in f:
+            if not line.startswith("#"):
+                lines.append(line)
+
+    reader = csv.DictReader(lines)
+    for row in reader:
+        # Normalise to lowercase keys to handle any header casing
+        row = {k.lower(): v for k, v in row.items()}
+        rsid = (row.get("rsid") or "").strip()
+        chrom = (row.get("chromosome") or "").strip()
+        pos_str = (row.get("position") or "0").strip()
+        result = (row.get("result") or "").strip()
+
+        if not rsid.startswith("rs"):
+            continue
+        geno = result.replace("-", "")
+        if not geno:
+            continue
+
+        try:
+            pos = int(pos_str)
+        except ValueError:
+            pos = 0
+
+        allele1 = geno[0] if len(geno) >= 1 else ""
+        allele2 = geno[1] if len(geno) >= 2 else ""
 
         genotypes[rsid] = GenotypeRecord(
             chrom=chrom,
@@ -374,8 +432,8 @@ def parse_genetic_file(
     """Parse genetic data file in any supported format.
 
     Args:
-        filepath: Path to genetic data file (23andMe, AncestryDNA, VCF).
-        fmt: Format hint — "auto", "23andme", "ancestry", or "vcf".
+        filepath: Path to genetic data file (23andMe, AncestryDNA, MyHeritage, VCF).
+        fmt: Format hint — "auto", "23andme", "ancestry", "myheritage", or "vcf".
 
     Returns:
         dict mapping rsid -> GenotypeRecord.
@@ -388,6 +446,7 @@ def parse_genetic_file(
     parsers = {
         "23andme": parse_23andme,
         "ancestry": parse_ancestry,
+        "myheritage": parse_myheritage,
         "vcf": parse_vcf,
     }
 

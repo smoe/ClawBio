@@ -13,6 +13,7 @@ from clawbio.common.parsers import (
     detect_format,
     parse_23andme,
     parse_ancestry,
+    parse_myheritage,
     parse_vcf,
     parse_vcf_matrix,
     parse_genetic_file,
@@ -64,6 +65,9 @@ class TestDetectFormat:
         with gzip.open(f, "wt") as fh:
             fh.write("##fileformat=VCFv4.2\n")
         assert detect_format(f) == "vcf"
+
+    def test_myheritage(self):
+        assert detect_format(FIXTURES / "mock_myheritage.csv") == "myheritage"
 
     def test_unknown_raises(self, tmp_path):
         f = tmp_path / "mystery.txt"
@@ -151,6 +155,61 @@ class TestParseAncestry:
 
 
 # ---------------------------------------------------------------------------
+# parse_myheritage
+# ---------------------------------------------------------------------------
+
+
+class TestParseMyHeritage:
+    def test_valid_file(self):
+        result = parse_myheritage(FIXTURES / "mock_myheritage.csv")
+        assert "rs1234567" in result
+        assert result["rs1234567"].genotype == "AG"
+        assert result["rs1234567"].allele1 == "A"
+        assert result["rs1234567"].allele2 == "G"
+        assert result["rs1234567"].chrom == "1"
+        assert result["rs1234567"].pos == 100000
+
+    def test_all_variants(self):
+        result = parse_myheritage(FIXTURES / "mock_myheritage.csv")
+        assert "rs7654321" in result
+        assert result["rs7654321"].genotype == "CC"
+        assert "rs1111111" in result
+        assert result["rs1111111"].genotype == "TT"
+
+    def test_skips_non_rs(self, tmp_path):
+        f = tmp_path / "mh.csv"
+        f.write_text(
+            "RSID,CHROMOSOME,POSITION,RESULT\n"
+            "rs111,1,100,AG\n"
+            "i5000001,1,200,CC\n"
+        )
+        result = parse_myheritage(f)
+        assert "rs111" in result
+        assert "i5000001" not in result
+
+    def test_skips_dash_result(self, tmp_path):
+        f = tmp_path / "mh_dash.csv"
+        f.write_text(
+            "RSID,CHROMOSOME,POSITION,RESULT\n"
+            "rs111,1,100,--\n"
+            "rs222,1,200,AG\n"
+        )
+        result = parse_myheritage(f)
+        assert "rs111" not in result
+        assert "rs222" in result
+
+    def test_lowercase_headers(self, tmp_path):
+        f = tmp_path / "mh_lower.csv"
+        f.write_text(
+            "rsid,chromosome,position,result\n"
+            "rs999,1,500,TT\n"
+        )
+        result = parse_myheritage(f)
+        assert "rs999" in result
+        assert result["rs999"].genotype == "TT"
+
+
+# ---------------------------------------------------------------------------
 # parse_vcf
 # ---------------------------------------------------------------------------
 
@@ -234,8 +293,16 @@ class TestParseGeneticFile:
         result = parse_genetic_file(FIXTURES / "mock_23andme.txt")
         assert "rs1234567" in result
 
+    def test_auto_detect_myheritage(self):
+        result = parse_genetic_file(FIXTURES / "mock_myheritage.csv")
+        assert "rs1234567" in result
+
     def test_explicit_format(self):
         result = parse_genetic_file(FIXTURES / "mock_ancestry.txt", fmt="ancestry")
+        assert "rs1234567" in result
+
+    def test_explicit_myheritage(self):
+        result = parse_genetic_file(FIXTURES / "mock_myheritage.csv", fmt="myheritage")
         assert "rs1234567" in result
 
     def test_unknown_format_raises(self):
