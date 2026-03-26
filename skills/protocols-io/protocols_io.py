@@ -9,7 +9,7 @@ Usage:
     python protocols_io.py --login
     python protocols_io.py --search "RNA extraction"
     python protocols_io.py --protocol 30756
-    python protocols_io.py --protocol 30756 --pdf
+    python protocols_io.py --protocol 30756 --output /tmp/protocols_io
     python protocols_io.py --steps 30756
     python protocols_io.py --demo
 """
@@ -19,6 +19,7 @@ from __future__ import annotations
 import argparse
 import collections
 import getpass
+import hashlib
 import itertools
 import json
 import os
@@ -106,7 +107,7 @@ class _RateLimiter:
             if len(self._timestamps) >= self._max:
                 sleep_for = self._timestamps[0] - (now - self._window)
                 if sleep_for > 0:
-                    print(f"  Rate limit (client) — waiting {sleep_for:.1f}s", file=sys.stderr)
+                    print(f"  Rate limit (client) -- waiting {sleep_for:.1f}s", file=sys.stderr)
                     time.sleep(sleep_for)
             self._timestamps.append(time.monotonic())
 
@@ -220,7 +221,7 @@ def _api_get(url: str, params: dict | None = None, token: str | None = None) -> 
                 retry_after = 10
             retry_after = max(1, min(retry_after, 120))
             print(
-                f"  HTTP 429 Too Many Requests — retry in {retry_after}s "
+                f"  HTTP 429 Too Many Requests -- retry in {retry_after}s "
                 f"({attempt}/{MAX_RETRIES_429})",
                 file=sys.stderr,
             )
@@ -284,12 +285,15 @@ def _parse_protocol_id(raw: str) -> str:
     - URI slug:  some-protocol-slug-abc123  → some-protocol-slug-abc123
     - Numeric:   30756  → 30756
     - DOI:       10.17504/protocols.io.abc123  → 10.17504/protocols.io.abc123
+    - dx.doi.org: dx.doi.org/10.17504/protocols.io.abc123  → 10.17504/protocols.io.abc123
     """
     s = raw.strip().rstrip("/")
     if "protocols.io/view/" in s:
         s = s.split("protocols.io/view/")[-1]
     elif "protocols.io/api/" in s:
         pass
+    elif s.startswith("dx.doi.org/"):
+        s = s[len("dx.doi.org/"):]
     s = s.split("?")[0].split("#")[0]
     return s
 
@@ -457,7 +461,7 @@ def format_steps(data: dict, protocol_id: str) -> str:
     else:
         steps = data.get("steps", [])
     lines = [
-        f"# Protocol Steps — {protocol_id}\n",
+        f"# Protocol Steps -- {protocol_id}\n",
         f"**{len(steps)} steps**\n",
     ]
     for j, s in enumerate(steps, 1):
@@ -502,7 +506,7 @@ def _load_demo_json(filename: str) -> dict:
 
 def run_demo() -> None:
     """Run offline demo with pre-cached data."""
-    print("\nProtocols.io Bridge — Demo Mode (offline)")
+    print("\nProtocols.io Bridge -- Demo Mode (offline)")
     print("=" * 50)
 
     demo_search = _load_demo_json("demo_search_results.json")
@@ -549,6 +553,69 @@ def run_demo() -> None:
 # ---------------------------------------------------------------------------
 
 
+def _sha256(path: Path) -> str:
+    """Return hex SHA-256 digest of a file, reading in 8 KB chunks."""
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(8192), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def _write_reproducibility(args: argparse.Namespace, output_dir: Path, output_files: list[Path]) -> None:
+    """Write commands.sh, checksums.sha256, and environment.yml to output_dir/reproducibility/.
+
+    Follows the AGENTS.md convention of placing reproducibility artefacts in a
+    dedicated subdirectory so they don't clutter the primary outputs.
+    """
+    repro_dir = output_dir / "reproducibility"
+    repro_dir.mkdir(parents=True, exist_ok=True)
+
+    # Reconstruct canonical CLI from parsed args (non-default values only)
+    def _sq(val: str) -> str:
+        return "'" + str(val).replace("'", "'\\''") + "'"
+
+    parts = ["python skills/protocols-io/protocols_io.py"]
+    if getattr(args, "demo", False):
+        parts.append("--demo")
+    elif getattr(args, "search", None):
+        parts.append(f"--search {_sq(args.search)}")
+        if getattr(args, "filter", "public") != "public":
+            parts.append(f"--filter {args.filter}")
+        if getattr(args, "peer_reviewed", None):
+            parts.append("--peer-reviewed")
+        if getattr(args, "published_on", None):
+            parts.append(f"--published-on {_sq(args.published_on)}")
+        if getattr(args, "page_size", 10) != 10:
+            parts.append(f"--page-size {args.page_size}")
+        if getattr(args, "page", 1) != 1:
+            parts.append(f"--page {args.page}")
+    elif getattr(args, "protocol", None):
+        parts.append(f"--protocol {_sq(args.protocol)}")
+    elif getattr(args, "steps", None):
+        parts.append(f"--steps {_sq(args.steps)}")
+    if getattr(args, "output", None):
+        parts.append(f"--output {_sq(args.output)}")
+
+    (repro_dir / "commands.sh").write_text(" \\\n  ".join(parts) + "\n")
+
+    # SHA-256 checksums in standard sha256sum format
+    lines = [f"{_sha256(p)}  {p.name}" for p in output_files if p.exists()]
+    (repro_dir / "checksums.sha256").write_text("\n".join(lines) + "\n")
+
+    # Conda environment spec
+    (repro_dir / "environment.yml").write_text(
+        "name: clawbio-protocols-io\n"
+        "channels:\n"
+        "  - conda-forge\n"
+        "dependencies:\n"
+        "  - python>=3.11\n"
+        "  - pip\n"
+        "  - pip:\n"
+        "    - requests\n"
+    )
+
+
 def _slugify(text: str, max_len: int = 60) -> str:
     """Turn a title or query into a safe filename slug."""
     import re
@@ -571,7 +638,7 @@ def download_protocol_pdf(uri: str, output_path: Path | None = None) -> Path | N
         hdrs["Authorization"] = f"Bearer {token}"
 
     try:
-        resp = requests.get(url, headers=hdrs, timeout=60, stream=True)
+        resp = requests.get(url, headers=hdrs, timeout=60)
     except requests.RequestException as e:
         print(f"ERROR: PDF download failed: {e}", file=sys.stderr)
         return None
@@ -607,14 +674,13 @@ def _prompt_for_token() -> str | None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="protocols.io bridge — search, browse, and retrieve scientific protocols"
+        description="protocols.io bridge -- search, browse, and retrieve scientific protocols"
     )
     parser.add_argument("--login", action="store_true", help="Authenticate with access token")
     parser.add_argument("--search", type=str, help="Search protocols by keyword")
     parser.add_argument("--protocol", type=str, help="Retrieve full protocol by ID, URI, or DOI")
     parser.add_argument("--steps", type=str, help="Retrieve protocol steps by ID, URI, or DOI")
     parser.add_argument("--demo", action="store_true", help="Run offline demo with pre-cached data")
-    parser.add_argument("--pdf", action="store_true", help="Download protocol as PDF (uses protocols.io PDF export)")
     parser.add_argument("--page-size", type=int, default=10, help="Results per page (1-100)")
     parser.add_argument("--page", type=int, default=1, help="Page number")
     parser.add_argument("--filter", type=str, default="public",
@@ -625,8 +691,11 @@ def main() -> None:
     parser.add_argument("--published-on", type=str, default=None,
                         help="Filter to protocols published on or after this date "
                              "(Unix timestamp or YYYY-MM-DD)")
+    parser.add_argument("--output", type=str, default=None,
+                        help="Directory to save outputs (PDFs, reports)")
 
     args = parser.parse_args()
+    output_dir = Path(args.output) if args.output else None
 
     if args.demo:
         run_demo()
@@ -695,7 +764,7 @@ def main() -> None:
             if total > 0:
                 print(
                     f"No protocols returned for page {args.page} "
-                    f"({total} total results exist — try a different --page)."
+                    f"({total} total results exist -- try a different --page)."
                 )
             else:
                 print("No protocols found matching your query and filters.")
@@ -703,26 +772,15 @@ def main() -> None:
 
         report = format_search_results(data, args.search)
         print(report)
+        if output_dir:
+            output_dir.mkdir(parents=True, exist_ok=True)
+            report_file = output_dir / "report.md"
+            report_file.write_text(report)
+            _write_reproducibility(args, output_dir, [report_file])
+            print(f"  Saved to {report_file}")
         return
 
     if args.protocol:
-        if args.pdf:
-            # Resolve URI slug first (needed for PDF URL)
-            with Spinner(f"Retrieving protocol metadata for {args.protocol}"):
-                data = get_protocol(args.protocol)
-            if not data:
-                print("ERROR: Could not retrieve protocol.", file=sys.stderr)
-                sys.exit(1)
-            p = data.get("payload", data.get("protocol", data))
-            uri = p.get("uri") or _parse_protocol_id(args.protocol)
-            title = p.get("title", args.protocol)
-            out_path = Path(f"{_slugify(title)}.pdf")
-            with Spinner(f"Downloading PDF for \"{title}\""):
-                result = download_protocol_pdf(uri, out_path)
-            if not result:
-                sys.exit(1)
-            return
-
         with Spinner(f"Retrieving protocol {args.protocol}"):
             data = get_protocol(args.protocol)
         if not data:
@@ -731,6 +789,21 @@ def main() -> None:
 
         report = format_protocol_detail(data)
         print(report)
+        if output_dir:
+            p = data.get("payload", data.get("protocol", data))
+            uri = p.get("uri") or _parse_protocol_id(args.protocol)
+            title = p.get("title", args.protocol)
+            output_dir.mkdir(parents=True, exist_ok=True)
+            report_file = output_dir / "report.md"
+            report_file.write_text(report)
+            print(f"  Saved report to {report_file}")
+            out_path = output_dir / f"{_slugify(title)}.pdf"
+            with Spinner(f"Downloading PDF for \"{title}\""):
+                pdf_result = download_protocol_pdf(uri, out_path)
+            output_files = [report_file]
+            if pdf_result:
+                output_files.append(out_path)
+            _write_reproducibility(args, output_dir, output_files)
         return
 
     if args.steps:
@@ -742,6 +815,12 @@ def main() -> None:
 
         report = format_steps(data, args.steps)
         print(report)
+        if output_dir:
+            output_dir.mkdir(parents=True, exist_ok=True)
+            report_file = output_dir / "report.md"
+            report_file.write_text(report)
+            _write_reproducibility(args, output_dir, [report_file])
+            print(f"  Saved to {report_file}")
         return
 
     parser.print_help()
