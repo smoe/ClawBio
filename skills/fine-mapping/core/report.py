@@ -400,7 +400,7 @@ def _plot_regional_association(df, credible_sets, figures_dir, plt, gene_track: 
                    linewidths=1.5, zorder=4, label=f"Lead ({df.loc[lead_idx, 'rsid']})")
         ax.legend(fontsize=8)
 
-    ax.set_ylabel("–log₁₀(p)")
+    ax.set_ylabel(r"–log$_{10}$($p$)")
     ax.set_title("Regional Association")
 
     if ax_gene is not None:
