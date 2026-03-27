@@ -270,28 +270,19 @@ def _plot_pip_locus(df, credible_sets, R, figures_dir, plt, mcolors):
 
 
 def _plot_regional_association(df, credible_sets, figures_dir, plt):
-    """–log10(p) regional plot with PIP overlay."""
-    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 6), sharex=True,
-                                   gridspec_kw={"height_ratios": [2, 1]})
+    """–log10(p) regional association plot."""
+    fig, ax = plt.subplots(figsize=(10, 4))
 
     x = df["pos"].values if "pos" in df.columns and df["pos"].notna().all() else np.arange(len(df))
 
-    # top: -log10(p)
     p = df["p"].values.astype(float)
     with np.errstate(divide="ignore"):
         log_p = -np.log10(np.where(p > 0, p, 1e-300))
-    ax1.scatter(x, log_p, s=15, c="#31688e", edgecolors="none", alpha=0.8)
-    ax1.axhline(7.3, color="#D55E00", linestyle="--", linewidth=0.8, alpha=0.7, label="p=5×10⁻⁸")
-    ax1.set_ylabel("–log₁₀(p)")
-    ax1.legend(fontsize=8)
+    ax.scatter(x, log_p, s=15, c="#31688e", edgecolors="none", alpha=0.8)
+    ax.set_xlabel("Position")
+    ax.set_ylabel("–log₁₀(p)")
+    ax.set_title("Regional Association")
 
-    # bottom: PIP
-    ax2.scatter(x, df["pip"].values, s=15, c="#35b779", edgecolors="none", alpha=0.8)
-    ax2.set_ylim(-0.02, 1.05)
-    ax2.set_xlabel("Position")
-    ax2.set_ylabel("PIP")
-
-    ax1.set_title("Regional Association + Fine-mapping")
     plt.tight_layout()
     fig.savefig(figures_dir / "regional_association.png", dpi=150)
     plt.close(fig)
