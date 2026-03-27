@@ -169,6 +169,7 @@ def run_finemapping(
     min_purity: float = 0.5,
     w: float = 0.04,
     make_figures: bool = True,
+    gene_track: bool = False,
     demo: bool = False,
 ) -> dict:
     """Run the full fine-mapping pipeline.
@@ -268,7 +269,7 @@ def run_finemapping(
 
     if make_figures:
         print("  Generating figures...")
-        generate_figures(output_dir, df, credible_sets, R=R)
+        generate_figures(output_dir, df, credible_sets, R=R, gene_track=gene_track)
 
     print("  Writing results.json...")
     results = {
@@ -358,6 +359,8 @@ def main():
     parser.add_argument("--prior-variance", type=float, default=0.04,
                         help="Prior variance W for ABF/SuSiE (default: 0.04, Wakefield 2009)")
     parser.add_argument("--no-figures", action="store_true", help="Skip figure generation")
+    parser.add_argument("--gene-track", action="store_true",
+                        help="Fetch gene annotations from Ensembl and add a gene track below the regional association plot (requires internet)")
 
     args = parser.parse_args()
 
@@ -382,6 +385,7 @@ def main():
         min_purity=args.min_purity,
         w=args.prior_variance,
         make_figures=not args.no_figures,
+        gene_track=args.gene_track,
         demo=args.demo,
     )
 

@@ -201,6 +201,7 @@ def generate_figures(
     df: pd.DataFrame,
     credible_sets: list[dict],
     R: Optional[np.ndarray] = None,
+    gene_track: bool = False,
 ) -> None:
     try:
         import matplotlib
@@ -216,7 +217,7 @@ def generate_figures(
 
     _plot_pip_locus(df, credible_sets, R, figures_dir, plt, mcolors)
     if "p" in df.columns and df["p"].notna().any():
-        _plot_regional_association(df, credible_sets, figures_dir, plt)
+        _plot_regional_association(df, credible_sets, figures_dir, plt, gene_track=gene_track)
     if R is not None:
         _plot_ld_heatmap(R, df, credible_sets, figures_dir, plt, mcolors)
 
@@ -269,11 +270,103 @@ def _plot_pip_locus(df, credible_sets, R, figures_dir, plt, mcolors):
     plt.close(fig)
 
 
-def _plot_regional_association(df, credible_sets, figures_dir, plt):
-    """–log10(p) regional association plot."""
-    fig, ax = plt.subplots(figsize=(10, 4))
+def _fetch_genes(chrom: str, start: int, end: int) -> list[dict]:
+    """Fetch gene annotations from Ensembl REST API. Returns [] on any failure."""
+    try:
+        import urllib.request, json as _json
+        chrom_clean = str(chrom).lstrip("chr")
+        url = (
+            f"https://rest.ensembl.org/overlap/region/human/"
+            f"{chrom_clean}:{start}-{end}"
+            f"?feature=gene;content-type=application/json"
+        )
+        req = urllib.request.Request(url, headers={"User-Agent": "ClawBio/1.0"})
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            genes = _json.loads(resp.read())
+        return [g for g in genes if g.get("feature_type") == "gene"]
+    except Exception:
+        return []
 
-    x = df["pos"].values if "pos" in df.columns and df["pos"].notna().all() else np.arange(len(df))
+
+def _plot_gene_track(ax, genes: list[dict], x_min: float, x_max: float) -> None:
+    """Draw gene arrows on ax."""
+    rows: list[float] = []
+    gene_rows: list[int] = []
+    for g in genes:
+        g_start, g_end = float(g["start"]), float(g["end"])
+        placed = False
+        for i, row_end in enumerate(rows):
+            if g_start > row_end + (x_max - x_min) * 0.01:
+                rows[i] = g_end
+                gene_rows.append(i)
+                placed = True
+                break
+        if not placed:
+            gene_rows.append(len(rows))
+            rows.append(g_end)
+
+    n_rows = max(gene_rows) + 1 if gene_rows else 1
+    ax.set_ylim(-0.5, n_rows - 0.5)
+
+    for g, row in zip(genes, gene_rows):
+        g_start, g_end = float(g["start"]), float(g["end"])
+        strand = g.get("strand", 1)
+        name = g.get("external_name") or g.get("gene_id", "")
+
+        vis_start = max(g_start, x_min)
+        vis_end = min(g_end, x_max)
+        if vis_end <= vis_start:
+            continue
+
+        ax.plot([vis_start, vis_end], [row, row], color="#444444", lw=2, solid_capstyle="butt")
+
+        arrow_x = vis_end if strand == 1 else vis_start
+        dx = (x_max - x_min) * 0.005 * (1 if strand == 1 else -1)
+        ax.annotate("", xy=(arrow_x + dx, row), xytext=(arrow_x, row),
+                    arrowprops=dict(arrowstyle="->", color="#444444", lw=1.0))
+
+        mid = (vis_start + vis_end) / 2
+        if vis_start >= x_min and vis_end <= x_max:
+            ax.text(mid, row + 0.3, name, ha="center", va="bottom", fontsize=6,
+                    fontstyle="italic", clip_on=True)
+
+    ax.set_yticks([])
+    ax.set_xlim(x_min, x_max)
+    ax.spines["left"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+    ax.spines["top"].set_visible(False)
+
+
+def _plot_regional_association(df, credible_sets, figures_dir, plt, gene_track: bool = False):
+    """–log10(p) regional association plot, with optional gene track."""
+    has_pos = "pos" in df.columns and df["pos"].notna().all()
+    has_chr = "chr" in df.columns and df["chr"].notna().any()
+
+    x = df["pos"].values if has_pos else np.arange(len(df))
+    x_min, x_max = float(x.min()), float(x.max())
+
+    genes = []
+    if gene_track and has_pos and has_chr:
+        chrom = df["chr"].dropna().iloc[0]
+        genes = _fetch_genes(chrom, int(x_min), int(x_max))
+
+    if genes:
+        rows: list[float] = []
+        for g in genes:
+            placed = any(
+                float(g["start"]) > row_end + (x_max - x_min) * 0.01
+                for row_end in rows
+            )
+            rows.append(float(g["end"])) if not placed else None
+        gene_height = max(0.8, len(rows) * 0.4)
+        fig, (ax, ax_gene) = plt.subplots(
+            2, 1, figsize=(10, 4 + gene_height),
+            gridspec_kw={"height_ratios": [4, gene_height], "hspace": 0.05},
+            sharex=True, layout="constrained",
+        )
+    else:
+        fig, ax = plt.subplots(figsize=(10, 4), layout="constrained")
+        ax_gene = None
 
     p = df["p"].values.astype(float)
     with np.errstate(divide="ignore"):
@@ -286,11 +379,16 @@ def _plot_regional_association(df, credible_sets, figures_dir, plt):
                    linewidths=1.5, zorder=4, label=f"Lead ({df.loc[lead_idx, 'rsid']})")
         ax.legend(fontsize=8)
 
-    ax.set_xlabel("Position")
     ax.set_ylabel("–log₁₀(p)")
     ax.set_title("Regional Association")
 
-    plt.tight_layout()
+    if ax_gene is not None:
+        ax.tick_params(axis="x", labelbottom=False)
+        _plot_gene_track(ax_gene, genes, x_min, x_max)
+        ax_gene.set_xlabel("Position" if has_pos else "Variant index")
+    else:
+        ax.set_xlabel("Position" if has_pos else "Variant index")
+
     fig.savefig(figures_dir / "regional_association.png", dpi=150)
     plt.close(fig)
 
