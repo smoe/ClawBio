@@ -1,6 +1,6 @@
 ---
 name: scrna-orchestrator
-description: Local Scanpy pipeline for single-cell RNA-seq QC, optional doublet detection, clustering, marker discovery, optional CellTypist annotation, optional latent downstream mode from integrated.h5ad/X_scvi, and optional two-group contrastive marker analysis from raw-count .h5ad or 10x Matrix Market input.
+description: Local Scanpy pipeline for single-cell RNA-seq QC, optional doublet detection, clustering, marker discovery, optional CellTypist annotation, optional latent downstream mode from integrated.h5ad/X_scvi, and optional dataset-level plus within-cluster contrastive marker analysis from raw-count .h5ad or 10x Matrix Market input.
 version: 0.1.0
 author: Yonghao Zhao
 license: MIT
@@ -66,8 +66,8 @@ Single-cell workflows are easy to misconfigure and hard to reproduce when run ad
 4. **Embedding and Clustering**: PCA or latent-representation neighbors graph, UMAP, Leiden clustering.
 5. **Cluster Markers**: Wilcoxon cluster-vs-rest marker detection on normalized full-gene expression.
 6. **Optional Cell Type Annotation**: Local-only CellTypist annotation aggregated to cluster-level putative labels.
-7. **Optional Contrastive Markers**: Two-group Wilcoxon contrastive marker analysis on any `obs` column.
-8. **Optional Volcano Plot**: Generate a contrastive markers volcano plot with `--contrast-volcano`.
+7. **Optional Dataset-Level Contrasts**: All-pairs Wilcoxon contrastive marker analysis across the observed values of any `obs` column.
+8. **Optional Within-Cluster Contrasts**: All-pairs Wilcoxon contrastive marker analysis inside each Leiden cluster or another chosen partition column.
 9. **Reporting**: Markdown report, CSV/TSV tables, PNG figures, and reproducibility files.
 
 ## Input Formats
@@ -93,7 +93,7 @@ When the user asks for scRNA QC/clustering/markers/annotation/contrastive marker
 4. **Analyze**:
 - Always run cluster marker analysis (`leiden`, Wilcoxon).
 - Optionally run CellTypist on the normalized full-gene matrix.
-- Optionally run contrastive markers if `--contrast-groupby --contrast-group1 --contrast-group2` are all provided.
+- Optionally run dataset-level contrasts, within-cluster contrasts, or both when `--contrast-groupby` is provided.
 5. **Generate**: Write `report.md`, `result.json`, tables, figures, and reproducibility bundle.
 
 ## CLI Reference
@@ -126,21 +126,21 @@ python skills/scrna-orchestrator/scrna_orchestrator.py \
   --input <input.h5ad> --output <report_dir> \
   --annotate celltypist --annotation-model Immune_All_Low
 
-# Optional two-group contrastive markers
+# Optional dataset-level pairwise contrasts
 python skills/scrna-orchestrator/scrna_orchestrator.py \
   --input <input.h5ad> --output <report_dir> \
-  --contrast-groupby <obs_column> --contrast-group1 <group_a> --contrast-group2 <group_b>
+  --contrast-groupby <obs_column> --contrast-scope dataset
+
+# Optional dataset-level + within-cluster contrasts together
+python skills/scrna-orchestrator/scrna_orchestrator.py \
+  --input <input.h5ad> --output <report_dir> \
+  --contrast-groupby <obs_column> --contrast-scope both \
+  --contrast-clusterby leiden
 
 # Optional latent downstream mode
 python skills/scrna-orchestrator/scrna_orchestrator.py \
   --input <integrated.h5ad> --output <report_dir> \
   --use-rep X_scvi
-
-# Optional contrastive markers volcano plot
-python skills/scrna-orchestrator/scrna_orchestrator.py \
-  --input <input.h5ad> --output <report_dir> \
-  --contrast-groupby <obs_column> --contrast-group1 <group_a> --contrast-group2 <group_b> \
-  --contrast-volcano
 
 # Via ClawBio runner
 python clawbio.py run scrna --input <input.h5ad> --output <report_dir>
@@ -156,10 +156,9 @@ python clawbio.py run scrna --demo --doublet-method scrublet
 ```
 
 Expected output:
-- `report.md` with QC, clustering, markers, and optional annotation/contrastive marker summaries
+- `report.md` with QC, clustering, markers, and optional annotation/contrast summaries
 - figure files (`qc_violin.png`, `umap_leiden.png`, `marker_dotplot.png`)
-- optional contrastive figure (`contrastive_markers_volcano.png`) when `--contrast-volcano` is set
-- marker, doublet, annotation, and contrastive marker tables when enabled
+- marker, doublet, annotation, dataset-level contrast, and within-cluster contrast tables when enabled
 - reproducibility bundle
 
 ## Algorithm / Methodology
@@ -183,12 +182,12 @@ Expected output:
 6. **Optional annotation**:
 - Run local CellTypist on normalized/log1p full-gene expression
 - Aggregate per-cell predictions to cluster-level majority labels with support and confidence
-7. **Optional contrastive markers v1**:
-- `scanpy.tl.rank_genes_groups(groupby=<de_groupby>, groups=[group1], reference=group2, method="wilcoxon", pts=True)`
-- Export full statistics and top genes by score
-8. **Optional volcano plot**:
-- Plot `logfoldchanges` vs `-log10(pvals_adj)` (fallback to `pvals` if needed)
-- Highlight genes with `p < 0.05` and `|log2FC| >= 1`
+7. **Optional dataset-level contrasts**:
+- For every unordered pair of observed groups in `--contrast-groupby`, run `scanpy.tl.rank_genes_groups(..., groups=[group1], reference=group2, method="wilcoxon", pts=True)`
+- Export full statistics and top genes by score per pairwise comparison
+8. **Optional within-cluster contrasts**:
+- For every cluster in `--contrast-clusterby` and every unordered pair of observed groups in `--contrast-groupby`, run the same Wilcoxon contrast on the cluster subset
+- Skip cluster/comparison pairs where either side has fewer than 2 cells, and report the skipped count
 
 ## Example Queries
 
@@ -198,7 +197,8 @@ Expected output:
 - "Generate a UMAP coloured by cluster"
 - "Remove predicted doublets before clustering"
 - "Assign putative CellTypist labels to clusters"
-- "Run contrastive markers for treated vs control"
+- "Run all pairwise contrastive markers for treated vs control vs rescue"
+- "Find within-cluster treatment markers in each Leiden cluster"
 
 ## Output Structure
 
@@ -209,16 +209,17 @@ output_directory/
 ├── figures/
 │   ├── qc_violin.png
 │   ├── umap_leiden.png
-│   ├── marker_dotplot.png
-│   └── contrastive_markers_volcano.png  # only when contrast volcano is enabled
+│   └── marker_dotplot.png
 ├── tables/
 │   ├── cluster_summary.csv
 │   ├── markers_top.csv
 │   ├── markers_top.tsv
 │   ├── doublet_summary.csv      # only when doublet detection is enabled
 │   ├── cluster_annotations.csv  # only when annotation is enabled
-│   ├── contrastive_markers_full.csv     # only when contrastive markers are enabled
-│   └── contrastive_markers_top.csv      # only when contrastive markers are enabled
+│   ├── contrastive_markers_full.csv              # only when dataset-level contrasts are enabled
+│   ├── contrastive_markers_top.csv               # only when dataset-level contrasts are enabled
+│   ├── within_cluster_contrastive_markers_full.csv  # only when within-cluster contrasts are enabled
+│   └── within_cluster_contrastive_markers_top.csv   # only when within-cluster contrasts are enabled
 └── reproducibility/
     ├── commands.sh
     ├── environment.yml
@@ -258,11 +259,10 @@ output_directory/
 **Current limitations**:
 - Raw-count `.h5ad` and 10x Matrix Market only
 - CellTypist support is human-model focused and requires a locally installed model
-- Multi-group pairwise contrastive markers and within-cluster contrastive markers are future work
 
 ## Status
 
-**MVP implemented** -- supports `.h5ad` input and `--demo` PBMC3k-first demo data (fallback to synthetic on failure), plus opt-in Scrublet doublet detection, opt-in local CellTypist annotation, opt-in latent downstream mode from `integrated.h5ad`, and opt-in two-group contrastive markers with volcano plots.
+**MVP implemented** -- supports `.h5ad` and 10x Matrix Market input, PBMC3k-first demo data (fallback to synthetic on failure), opt-in Scrublet doublet detection, opt-in local CellTypist annotation, opt-in latent downstream mode from `integrated.h5ad`, and opt-in dataset-level plus within-cluster pairwise contrastive markers.
 
 ## Citations
 

@@ -149,6 +149,56 @@ def _build_integrated_latent_input(path: Path) -> None:
     adata.write_h5ad(path)
 
 
+def _build_within_cluster_latent_input(path: Path) -> None:
+    from anndata import AnnData  # type: ignore
+
+    genes = ["CD3D", "TRBC1", "MS4A1", "CD79A", "LYZ", "S100A8", "NKG7", "GNLY"]
+    rng = np.random.default_rng(7)
+    templates = [
+        np.array([18, 16, 1, 1, 1, 1, 4, 3], dtype=np.int32),
+        np.array([1, 1, 18, 16, 1, 1, 3, 1], dtype=np.int32),
+        np.array([1, 1, 1, 1, 18, 16, 10, 8], dtype=np.int32),
+    ]
+
+    rows = []
+    conditions = []
+    cluster_labels = []
+    for cluster_idx, template in enumerate(templates):
+        for cell_idx in range(8):
+            rows.append(rng.poisson(lam=template).astype(np.int32) + 1)
+            cluster_labels.append(f"truth_{cluster_idx}")
+            if cluster_idx == 2:
+                conditions.append("condition_a")
+            else:
+                conditions.append("condition_a" if cell_idx < 4 else "condition_b")
+
+    counts = np.vstack(rows)
+    obs = pd.DataFrame(
+        {
+            "condition": conditions,
+            "truth_cluster": cluster_labels,
+            "sample_id": [f"cell_{i}" for i in range(len(rows))],
+        },
+        index=pd.Index([f"cell_{i}" for i in range(len(rows))], dtype="object"),
+    )
+    var = pd.DataFrame(index=pd.Index(genes, dtype="object"))
+    adata = AnnData(X=counts.astype(np.float32), obs=obs, var=var)
+    adata.layers["counts"] = counts.copy()
+    adata.X = np.log1p(counts.astype(np.float32))
+    adata.obsm["X_scvi"] = np.column_stack(
+        [
+            np.repeat([0.0, 3.5, 7.0], repeats=8),
+            np.tile(np.linspace(0.0, 1.4, num=8), 3),
+        ]
+    ).astype(np.float32)
+    adata.uns["clawbio_scrna_embedding"] = {
+        "source_skill": "scrna-embedding",
+        "preferred_rep": "X_scvi",
+        "counts_layer": "counts",
+    }
+    adata.write_h5ad(path)
+
+
 def _build_10x_mtx_input(matrix_dir: Path, *, compressed: bool = False, prefix: str = "") -> Path:
     from scipy import io, sparse  # type: ignore
 
@@ -329,9 +379,9 @@ def test_markers_csv_tsv_schema_match(tmp_path: Path):
     assert len(csv_df) > 0
 
 
-def test_de_two_group_outputs_and_result_metadata(tmp_path: Path):
+def test_dataset_level_contrast_outputs_and_result_metadata(tmp_path: Path):
     _require_scanpy()
-    output_dir = tmp_path / "de_demo_output"
+    output_dir = tmp_path / "dataset_contrast_output"
     result = _run_cmd(
         [
             "--demo",
@@ -339,10 +389,8 @@ def test_de_two_group_outputs_and_result_metadata(tmp_path: Path):
             str(output_dir),
             "--contrast-groupby",
             "demo_truth",
-            "--contrast-group1",
-            "cluster_0",
-            "--contrast-group2",
-            "cluster_1",
+            "--contrast-scope",
+            "dataset",
             "--contrast-top-genes",
             "7",
         ]
@@ -357,59 +405,84 @@ def test_de_two_group_outputs_and_result_metadata(tmp_path: Path):
     de_full_df = pd.read_csv(de_full)
     de_top_df = pd.read_csv(de_top)
     assert len(de_full_df) > 0
-    assert 0 < len(de_top_df) <= 7
+    assert set(["scope", "groupby", "group1", "group2", "comparison_id"]).issubset(de_full_df.columns)
+    assert de_full_df["comparison_id"].nunique() == 3
+    assert de_full_df["scope"].astype(str).eq("dataset").all()
+    assert (de_top_df.groupby("comparison_id").size() <= 7).all()
 
     payload = json.loads((output_dir / "result.json").read_text())
-    de_meta = payload["data"]["contrastive_markers"]
+    de_meta = payload["data"]["contrasts"]["dataset"]
     assert de_meta["enabled"] is True
     assert de_meta["groupby"] == "demo_truth"
-    assert de_meta["group1"] == "cluster_0"
-    assert de_meta["group2"] == "cluster_1"
-    assert de_meta["n_genes_full"] == len(de_full_df)
+    assert de_meta["n_contrasts"] == 3
+    assert de_meta["n_rows_full"] == len(de_full_df)
     assert de_meta["top_table"] == "contrastive_markers_top.csv"
-    assert de_meta["volcano_plot"] == ""
     assert "contrastive_markers_full.csv" in payload["data"]["tables"]
     assert "contrastive_markers_top.csv" in payload["data"]["tables"]
-    assert "contrastive_markers_volcano.png" not in payload["data"]["figures"]
+    assert payload["data"]["contrasts"]["within_cluster"]["enabled"] is False
 
     report_text = (output_dir / "report.md").read_text()
-    assert "Contrastive Marker Analysis (Two-Group)" in report_text
-    assert "cluster_0" in report_text
-    assert "cluster_1" in report_text
-    assert "Volcano plot: not generated" in report_text
+    assert "Dataset-Level Contrastive Markers" in report_text
+    assert "Pairwise comparisons run: **3**" in report_text
 
 
-def test_de_volcano_generated_when_requested(tmp_path: Path):
+def test_within_cluster_contrast_outputs_and_skip_metadata(tmp_path: Path):
     _require_scanpy()
-    output_dir = tmp_path / "de_volcano_output"
+    input_path = tmp_path / "within_cluster_latent.h5ad"
+    _build_within_cluster_latent_input(input_path)
+    output_dir = tmp_path / "within_cluster_output"
     result = _run_cmd(
         [
-            "--demo",
+            "--input",
+            str(input_path),
             "--output",
             str(output_dir),
+            "--use-rep",
+            "X_scvi",
+            "--min-genes",
+            "1",
+            "--min-cells",
+            "1",
+            "--n-top-hvg",
+            "4",
+            "--n-neighbors",
+            "4",
             "--contrast-groupby",
-            "demo_truth",
-            "--contrast-group1",
-            "cluster_0",
-            "--contrast-group2",
-            "cluster_1",
+            "condition",
+            "--contrast-scope",
+            "within-cluster",
+            "--contrast-clusterby",
+            "truth_cluster",
             "--contrast-top-genes",
-            "10",
-            "--contrast-volcano",
+            "4",
         ]
     )
     assert result.returncode == 0, result.stderr
 
-    volcano_path = output_dir / "figures" / "contrastive_markers_volcano.png"
-    assert volcano_path.exists()
+    within_full = output_dir / "tables" / "within_cluster_contrastive_markers_full.csv"
+    within_top = output_dir / "tables" / "within_cluster_contrastive_markers_top.csv"
+    assert within_full.exists()
+    assert within_top.exists()
+
+    within_full_df = pd.read_csv(within_full)
+    within_top_df = pd.read_csv(within_top)
+    assert set(["cluster", "scope", "groupby", "group1", "group2", "comparison_id"]).issubset(within_full_df.columns)
+    assert within_full_df["scope"].astype(str).eq("within-cluster").all()
+    assert within_full_df["cluster"].nunique() >= 2
+    assert (within_top_df.groupby(["cluster", "comparison_id"]).size() <= 4).all()
 
     payload = json.loads((output_dir / "result.json").read_text())
-    de_meta = payload["data"]["contrastive_markers"]
-    assert de_meta["volcano_plot"] == "contrastive_markers_volcano.png"
-    assert "contrastive_markers_volcano.png" in payload["data"]["figures"]
+    within_meta = payload["data"]["contrasts"]["within_cluster"]
+    assert within_meta["enabled"] is True
+    assert within_meta["groupby"] == "condition"
+    assert within_meta["clusterby"] == "truth_cluster"
+    assert within_meta["n_contrasts"] >= 2
+    assert within_meta["skipped_contrasts"] >= 1
+    assert within_meta["n_clusters_with_results"] >= 2
 
     report_text = (output_dir / "report.md").read_text()
-    assert "Contrastive Marker Volcano" in report_text
+    assert "Within-Cluster Contrastive Markers" in report_text
+    assert "Skipped cluster/comparison pairs" in report_text
 
 
 def test_report_contains_key_stats(tmp_path: Path):
@@ -609,23 +682,18 @@ def test_commands_sh_contains_contrast_flags_when_enabled(tmp_path: Path):
             str(output_dir),
             "--contrast-groupby",
             "demo_truth",
-            "--contrast-group1",
-            "cluster_0",
-            "--contrast-group2",
-            "cluster_1",
+            "--contrast-scope",
+            "dataset",
             "--contrast-top-genes",
             "9",
-            "--contrast-volcano",
         ]
     )
     assert result.returncode == 0, result.stderr
 
     commands_sh = (output_dir / "reproducibility" / "commands.sh").read_text()
     assert "--contrast-groupby demo_truth" in commands_sh
-    assert "--contrast-group1 cluster_0" in commands_sh
-    assert "--contrast-group2 cluster_1" in commands_sh
+    assert "--contrast-scope dataset" in commands_sh
     assert "--contrast-top-genes 9" in commands_sh
-    assert "--contrast-volcano" in commands_sh
 
 
 def test_demo_doublet_detection_outputs_summary_metadata(tmp_path: Path):
@@ -654,7 +722,7 @@ def test_demo_doublet_detection_outputs_summary_metadata(tmp_path: Path):
     assert "--doublet-method scrublet" in commands_sh
 
 
-def test_doublet_and_de_can_run_together(tmp_path: Path):
+def test_doublet_and_dataset_contrasts_can_run_together(tmp_path: Path):
     _require_scanpy()
     output_dir = tmp_path / "doublet_de_output"
     result = _run_cmd(
@@ -666,10 +734,8 @@ def test_doublet_and_de_can_run_together(tmp_path: Path):
             "scrublet",
             "--contrast-groupby",
             "demo_truth",
-            "--contrast-group1",
-            "cluster_0",
-            "--contrast-group2",
-            "cluster_1",
+            "--contrast-scope",
+            "dataset",
         ]
     )
     assert result.returncode == 0, result.stderr
@@ -677,9 +743,25 @@ def test_doublet_and_de_can_run_together(tmp_path: Path):
     assert (output_dir / "tables" / "contrastive_markers_full.csv").exists()
 
 
-def test_de_requires_all_group_flags(tmp_path: Path):
+def test_contrast_groupby_missing_rejected_when_other_flags_are_used(tmp_path: Path):
     _require_scanpy()
-    output_dir = tmp_path / "de_incomplete"
+    output_dir = tmp_path / "contrast_missing_groupby"
+    result = _run_cmd(
+        [
+            "--demo",
+            "--output",
+            str(output_dir),
+            "--contrast-scope",
+            "both",
+        ]
+    )
+    assert result.returncode != 0
+    assert "--contrast-groupby is required" in result.stderr
+
+
+def test_contrast_top_genes_must_be_positive(tmp_path: Path):
+    _require_scanpy()
+    output_dir = tmp_path / "contrast_top_genes_zero"
     result = _run_cmd(
         [
             "--demo",
@@ -687,23 +769,17 @@ def test_de_requires_all_group_flags(tmp_path: Path):
             str(output_dir),
             "--contrast-groupby",
             "demo_truth",
+            "--contrast-top-genes",
+            "0",
         ]
     )
     assert result.returncode != 0
-    assert "Contrastive marker analysis requires --contrast-groupby" in result.stderr
+    assert "--contrast-top-genes must be >= 1" in result.stderr
 
 
-def test_de_volcano_requires_de_flags(tmp_path: Path):
+def test_contrast_groupby_missing_rejected(tmp_path: Path):
     _require_scanpy()
-    output_dir = tmp_path / "de_volcano_requires_flags"
-    result = _run_cmd(["--demo", "--output", str(output_dir), "--contrast-volcano"])
-    assert result.returncode != 0
-    assert "--contrast-volcano requires --contrast-groupby" in result.stderr
-
-
-def test_de_groupby_missing_rejected(tmp_path: Path):
-    _require_scanpy()
-    output_dir = tmp_path / "de_missing_groupby"
+    output_dir = tmp_path / "contrast_bad_groupby"
     result = _run_cmd(
         [
             "--demo",
@@ -711,34 +787,60 @@ def test_de_groupby_missing_rejected(tmp_path: Path):
             str(output_dir),
             "--contrast-groupby",
             "not_a_column",
-            "--contrast-group1",
-            "cluster_0",
-            "--contrast-group2",
-            "cluster_1",
+            "--contrast-scope",
+            "dataset",
         ]
     )
     assert result.returncode != 0
     assert "Contrastive marker groupby column not found" in result.stderr
 
 
-def test_de_groups_missing_rejected(tmp_path: Path):
+def test_contrast_groupby_requires_multiple_observed_groups(tmp_path: Path):
     _require_scanpy()
-    output_dir = tmp_path / "de_missing_groups"
+    from anndata import AnnData  # type: ignore
+
+    input_path = tmp_path / "single_group.h5ad"
+    output_dir = tmp_path / "single_group_output"
+    x = np.array(
+        [
+            [3, 1, 0, 0],
+            [4, 2, 0, 0],
+            [0, 0, 5, 3],
+            [0, 0, 4, 2],
+        ],
+        dtype=np.int32,
+    )
+    obs = pd.DataFrame(
+        {
+            "condition": ["only_group"] * 4,
+        },
+        index=[f"cell_{i}" for i in range(4)],
+    )
+    var = pd.DataFrame(index=["GeneA", "GeneB", "GeneC", "GeneD"])
+    AnnData(X=x, obs=obs, var=var).write_h5ad(input_path)
+
     result = _run_cmd(
         [
-            "--demo",
+            "--input",
+            str(input_path),
             "--output",
             str(output_dir),
+            "--min-genes",
+            "1",
+            "--min-cells",
+            "1",
+            "--n-top-hvg",
+            "4",
+            "--n-neighbors",
+            "2",
             "--contrast-groupby",
-            "demo_truth",
-            "--contrast-group1",
-            "missing_a",
-            "--contrast-group2",
-            "missing_b",
+            "condition",
+            "--contrast-scope",
+            "dataset",
         ]
     )
     assert result.returncode != 0
-    assert "Contrastive marker group value(s) not found" in result.stderr
+    assert "must contain at least 2 observed groups" in result.stderr
 
 
 def test_clawbio_run_scrna_accepts_whitelisted_tuning_flags(tmp_path: Path):
@@ -809,19 +911,15 @@ def test_clawbio_run_scrna_accepts_whitelisted_contrast_flags(tmp_path: Path):
             str(output_dir),
             "--contrast-groupby",
             "demo_truth",
-            "--contrast-group1",
-            "cluster_0",
-            "--contrast-group2",
-            "cluster_1",
+            "--contrast-scope",
+            "dataset",
             "--contrast-top-genes",
             "8",
-            "--contrast-volcano",
         ]
     )
     assert result.returncode == 0, result.stderr
     assert (output_dir / "tables" / "contrastive_markers_full.csv").exists()
     assert (output_dir / "tables" / "contrastive_markers_top.csv").exists()
-    assert (output_dir / "figures" / "contrastive_markers_volcano.png").exists()
 
 
 def test_doublet_missing_dependency_message(monkeypatch: pytest.MonkeyPatch):
@@ -1046,10 +1144,8 @@ def test_integrated_latent_input_auto_mode_runs(tmp_path: Path):
             "4",
             "--contrast-groupby",
             "batch",
-            "--contrast-group1",
-            "batch_0",
-            "--contrast-group2",
-            "batch_1",
+            "--contrast-scope",
+            "dataset",
         ]
     )
     assert result.returncode == 0, result.stderr
@@ -1057,7 +1153,7 @@ def test_integrated_latent_input_auto_mode_runs(tmp_path: Path):
     assert payload["summary"]["graph_basis"] == "X_scvi"
     assert payload["summary"]["use_rep_resolved"] == "X_scvi"
     assert payload["summary"]["counts_layer"] == "counts"
-    assert payload["data"]["contrastive_markers"]["enabled"] is True
+    assert payload["data"]["contrasts"]["dataset"]["enabled"] is True
     assert (output_dir / "tables" / "contrastive_markers_full.csv").exists()
 
 
@@ -1140,27 +1236,35 @@ def test_matrix_mtx_gz_input_runs(tmp_path: Path):
     assert "barcodes.tsv.gz" in checksums
 
 
-def test_legacy_de_flags_still_work_for_contrastive_markers(tmp_path: Path):
+def test_invalid_contrast_scope_is_rejected(tmp_path: Path):
     _require_scanpy()
-    output_dir = tmp_path / "legacy_de_alias_output"
+    output_dir = tmp_path / "invalid_scope_output"
     result = _run_cmd(
+        [
+            "--demo",
+            "--output",
+            str(output_dir),
+            "--contrast-groupby",
+            "demo_truth",
+            "--contrast-scope",
+            "not-a-scope",
+        ]
+    )
+    assert result.returncode != 0
+    assert "invalid choice" in result.stderr
+
+
+def test_clawbio_run_scrna_rejects_removed_de_flags(tmp_path: Path):
+    _require_scanpy()
+    output_dir = tmp_path / "removed_de_flags_output"
+    result = _run_clawbio_scrna_cmd(
         [
             "--demo",
             "--output",
             str(output_dir),
             "--de-groupby",
             "demo_truth",
-            "--de-group1",
-            "cluster_0",
-            "--de-group2",
-            "cluster_1",
-            "--de-top-genes",
-            "6",
-            "--de-volcano",
         ]
     )
-    assert result.returncode == 0, result.stderr
-    payload = json.loads((output_dir / "result.json").read_text())
-    assert payload["data"]["contrastive_markers"]["enabled"] is True
-    assert payload["data"]["contrastive_markers"]["used_legacy_flags"] is True
-    assert payload["data"]["de"]["used_legacy_flags"] is True
+    assert result.returncode != 0
+    assert "unrecognized arguments: --de-groupby" in result.stderr

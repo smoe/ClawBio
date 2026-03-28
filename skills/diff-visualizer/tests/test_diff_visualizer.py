@@ -65,6 +65,63 @@ def _require_anndata() -> None:
     pytest.importorskip("anndata")
 
 
+def _write_within_cluster_contrast_table(path: Path) -> None:
+    df = pd.DataFrame(
+        [
+            {
+                "cluster": "0",
+                "scope": "within-cluster",
+                "groupby": "condition",
+                "group1": "treated",
+                "group2": "control",
+                "comparison_id": "treated__vs__control",
+                "names": "GeneA",
+                "scores": 5.2,
+                "logfoldchanges": 1.7,
+                "pvals_adj": 0.001,
+            },
+            {
+                "cluster": "0",
+                "scope": "within-cluster",
+                "groupby": "condition",
+                "group1": "treated",
+                "group2": "control",
+                "comparison_id": "treated__vs__control",
+                "names": "GeneB",
+                "scores": 4.7,
+                "logfoldchanges": 1.2,
+                "pvals_adj": 0.004,
+            },
+            {
+                "cluster": "1",
+                "scope": "within-cluster",
+                "groupby": "condition",
+                "group1": "treated",
+                "group2": "control",
+                "comparison_id": "treated__vs__control",
+                "names": "GeneC",
+                "scores": 6.1,
+                "logfoldchanges": -1.5,
+                "pvals_adj": 0.002,
+            },
+            {
+                "cluster": "1",
+                "scope": "within-cluster",
+                "groupby": "condition",
+                "group1": "treated",
+                "group2": "control",
+                "comparison_id": "treated__vs__control",
+                "names": "GeneD",
+                "scores": 4.9,
+                "logfoldchanges": -1.1,
+                "pvals_adj": 0.007,
+            },
+        ]
+    )
+    path.parent.mkdir(parents=True, exist_ok=True)
+    df.to_csv(path, index=False)
+
+
 def test_bulk_table_input_outputs(tmp_path: Path):
     output_dir = tmp_path / "bulk_output"
     result = _run_diffviz(
@@ -150,6 +207,37 @@ def test_scrna_contrast_table_input_outputs(tmp_path: Path):
     payload = json.loads((output_dir / "result.json").read_text())
     assert payload["summary"]["mode"] == "scrna"
     assert payload["summary"]["source_kind"] == "scrna-contrast-table"
+
+
+def test_scrna_output_dir_with_dataset_contrast_is_autodetected(tmp_path: Path):
+    upstream_dir = tmp_path / "scrna_upstream"
+    tables_dir = upstream_dir / "tables"
+    tables_dir.mkdir(parents=True)
+    contrast_path = tables_dir / "contrastive_markers_full.csv"
+    contrast_path.write_text((EXAMPLES_DIR / "demo_scrna_contrast.csv").read_text(), encoding="utf-8")
+
+    output_dir = tmp_path / "scrna_from_output_dir"
+    result = _run_diffviz(["--mode", "scrna", "--input", str(upstream_dir), "--output", str(output_dir)])
+    assert result.returncode == 0, result.stderr
+    assert (output_dir / "figures" / "contrast_volcano.png").exists()
+    payload = json.loads((output_dir / "result.json").read_text())
+    assert payload["summary"]["source_kind"] == "scrna-output-dir"
+
+
+def test_scrna_output_dir_with_within_cluster_contrast_renders_cluster_panels(tmp_path: Path):
+    upstream_dir = tmp_path / "scrna_within_cluster_upstream"
+    within_cluster_path = upstream_dir / "tables" / "within_cluster_contrastive_markers_full.csv"
+    _write_within_cluster_contrast_table(within_cluster_path)
+
+    output_dir = tmp_path / "scrna_within_cluster_viz"
+    result = _run_diffviz(["--mode", "scrna", "--input", str(upstream_dir), "--output", str(output_dir)])
+    assert result.returncode == 0, result.stderr
+    assert (output_dir / "figures" / "within_cluster_marker_panels.png").exists()
+    assert (output_dir / "tables" / "within_cluster_top_markers.csv").exists()
+    assert not (output_dir / "figures" / "contrast_volcano.png").exists()
+    payload = json.loads((output_dir / "result.json").read_text())
+    assert payload["summary"]["source_kind"] == "scrna-output-dir"
+    assert payload["summary"]["within_cluster_comparisons"] == 2
 
 
 def test_scrna_markers_with_adata_generate_enhanced_plots(tmp_path: Path):

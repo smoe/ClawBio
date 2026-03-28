@@ -83,6 +83,7 @@ class InputBundle:
     input_files: list[Path]
     bulk_df: pd.DataFrame | None = None
     scrna_contrast_df: pd.DataFrame | None = None
+    scrna_within_cluster_contrast_df: pd.DataFrame | None = None
     scrna_markers_df: pd.DataFrame | None = None
     upstream_result: dict[str, Any] = field(default_factory=dict)
     notes: list[str] = field(default_factory=list)
@@ -129,6 +130,8 @@ def _detect_table_kind(df: pd.DataFrame) -> str | None:
     cols = {str(col) for col in df.columns}
     if {"gene", "log2FoldChange"} <= cols and ("padj" in cols or "pvalue" in cols):
         return "bulk"
+    if {"cluster", "comparison_id", "group1", "group2", "names", "scores"} <= cols:
+        return "scrna_within_cluster_contrast"
     if {"cluster", "names", "scores"} <= cols:
         return "scrna_markers"
     if {"names", "scores"} <= cols:
@@ -161,6 +164,24 @@ def _validate_scrna_contrast_table(df: pd.DataFrame) -> pd.DataFrame:
     out = out.dropna(subset=["scores"]).reset_index(drop=True)
     if out.empty:
         raise ValueError("scRNA contrast table has no finite score rows after validation.")
+    return out
+
+
+def _validate_scrna_within_cluster_contrast_table(df: pd.DataFrame) -> pd.DataFrame:
+    missing = {"cluster", "comparison_id", "group1", "group2", "names", "scores"} - set(df.columns)
+    if missing:
+        raise ValueError(
+            "scRNA within-cluster contrast table missing required columns: "
+            f"{', '.join(sorted(missing))}."
+        )
+    out = _maybe_numeric(df, ["scores", "logfoldchanges", "pvals_adj", "pvals"])
+    for col in ("cluster", "comparison_id", "group1", "group2", "groupby", "scope"):
+        if col in out.columns:
+            out[col] = out[col].astype(str)
+    out["names"] = out["names"].astype(str)
+    out = out.dropna(subset=["scores"]).reset_index(drop=True)
+    if out.empty:
+        raise ValueError("scRNA within-cluster contrast table has no finite score rows after validation.")
     return out
 
 
@@ -240,11 +261,13 @@ def resolve_input_bundle(args: argparse.Namespace) -> InputBundle:
         tables_dir = input_path / "tables"
         bulk_path = tables_dir / "de_results.csv"
         contrast_path = tables_dir / "contrastive_markers_full.csv"
+        within_cluster_path = tables_dir / "within_cluster_contrastive_markers_full.csv"
         markers_path = tables_dir / "markers_top.csv"
         upstream_result = _load_upstream_result_json(input_path)
 
         has_bulk = bulk_path.exists()
         has_contrast = contrast_path.exists()
+        has_within_cluster = within_cluster_path.exists()
         has_markers = markers_path.exists()
 
         if requested_mode == "bulk":
@@ -263,18 +286,24 @@ def resolve_input_bundle(args: argparse.Namespace) -> InputBundle:
             )
 
         if requested_mode == "scrna":
-            if not has_contrast and not has_markers:
+            if not has_contrast and not has_within_cluster and not has_markers:
                 raise ValueError(
                     "scRNA mode requested, but input directory does not contain "
-                    "tables/contrastive_markers_full.csv or tables/markers_top.csv."
+                    "tables/contrastive_markers_full.csv, "
+                    "tables/within_cluster_contrastive_markers_full.csv, or tables/markers_top.csv."
                 )
             return InputBundle(
                 mode="scrna",
                 source_kind="scrna-output-dir",
                 input_path=input_path,
-                input_files=[path for path in [contrast_path, markers_path] if path.exists()],
+                input_files=[path for path in [contrast_path, within_cluster_path, markers_path] if path.exists()],
                 scrna_contrast_df=_validate_scrna_contrast_table(_read_table(contrast_path))
                 if has_contrast
+                else None,
+                scrna_within_cluster_contrast_df=_validate_scrna_within_cluster_contrast_table(
+                    _read_table(within_cluster_path)
+                )
+                if has_within_cluster
                 else None,
                 scrna_markers_df=_validate_scrna_markers_table(_read_table(markers_path))
                 if has_markers
@@ -283,7 +312,7 @@ def resolve_input_bundle(args: argparse.Namespace) -> InputBundle:
                 notes=["Detected scrna-orchestrator output directory."],
             )
 
-        if has_bulk and (has_contrast or has_markers):
+        if has_bulk and (has_contrast or has_within_cluster or has_markers):
             raise ValueError(
                 "Input directory contains both bulk and scRNA result tables. "
                 "Please re-run with --mode bulk or --mode scrna."
@@ -298,14 +327,19 @@ def resolve_input_bundle(args: argparse.Namespace) -> InputBundle:
                 upstream_result=upstream_result,
                 notes=["Detected rnaseq-de output directory."],
             )
-        if has_contrast or has_markers:
+        if has_contrast or has_within_cluster or has_markers:
             return InputBundle(
                 mode="scrna",
                 source_kind="scrna-output-dir",
                 input_path=input_path,
-                input_files=[path for path in [contrast_path, markers_path] if path.exists()],
+                input_files=[path for path in [contrast_path, within_cluster_path, markers_path] if path.exists()],
                 scrna_contrast_df=_validate_scrna_contrast_table(_read_table(contrast_path))
                 if has_contrast
+                else None,
+                scrna_within_cluster_contrast_df=_validate_scrna_within_cluster_contrast_table(
+                    _read_table(within_cluster_path)
+                )
+                if has_within_cluster
                 else None,
                 scrna_markers_df=_validate_scrna_markers_table(_read_table(markers_path))
                 if has_markers
@@ -315,7 +349,8 @@ def resolve_input_bundle(args: argparse.Namespace) -> InputBundle:
             )
         raise ValueError(
             "Could not detect supported upstream outputs in the directory. Expected one of "
-            "tables/de_results.csv, tables/contrastive_markers_full.csv, or tables/markers_top.csv."
+            "tables/de_results.csv, tables/contrastive_markers_full.csv, "
+            "tables/within_cluster_contrastive_markers_full.csv, or tables/markers_top.csv."
         )
 
     table_df = _read_table(input_path)
@@ -334,6 +369,14 @@ def resolve_input_bundle(args: argparse.Namespace) -> InputBundle:
             bulk_df=_validate_bulk_table(table_df),
         )
     if requested_mode == "scrna":
+        if detected_kind == "scrna_within_cluster_contrast":
+            return InputBundle(
+                mode="scrna",
+                source_kind="scrna-within-cluster-contrast-table",
+                input_path=input_path,
+                input_files=[input_path],
+                scrna_within_cluster_contrast_df=_validate_scrna_within_cluster_contrast_table(table_df),
+            )
         if detected_kind == "scrna_contrast":
             return InputBundle(
                 mode="scrna",
@@ -362,6 +405,14 @@ def resolve_input_bundle(args: argparse.Namespace) -> InputBundle:
             input_path=input_path,
             input_files=[input_path],
             bulk_df=_validate_bulk_table(table_df),
+        )
+    if detected_kind == "scrna_within_cluster_contrast":
+        return InputBundle(
+            mode="scrna",
+            source_kind="scrna-within-cluster-contrast-table",
+            input_path=input_path,
+            input_files=[input_path],
+            scrna_within_cluster_contrast_df=_validate_scrna_within_cluster_contrast_table(table_df),
         )
     if detected_kind == "scrna_contrast":
         return InputBundle(
@@ -1019,6 +1070,7 @@ def _infer_scrna_groupby(adata: Any) -> str:
 
 def _top_scrna_genes(
     contrast_df: pd.DataFrame | None,
+    within_cluster_df: pd.DataFrame | None,
     markers_df: pd.DataFrame | None,
     top_genes: int,
 ) -> list[str]:
@@ -1030,6 +1082,15 @@ def _top_scrna_genes(
                 ascending=[True, False] if "pvals_adj" in contrast_df.columns else [False],
             )["names"].dropna().astype(str).tolist()
         )
+    if within_cluster_df is not None and not within_cluster_df.empty:
+        sort_cols = ["cluster", "comparison_id", "pvals_adj", "scores"] if "pvals_adj" in within_cluster_df.columns else ["cluster", "comparison_id", "scores"]
+        ascending = [True, True, True, False] if "pvals_adj" in within_cluster_df.columns else [True, True, False]
+        per_panel = (
+            within_cluster_df.sort_values(sort_cols, ascending=ascending)
+            .groupby(["cluster", "comparison_id"], as_index=False, group_keys=False)
+            .head(min(max(top_genes // 2, 2), top_genes))
+        )
+        genes.extend(per_panel["names"].dropna().astype(str).tolist())
     if markers_df is not None and not markers_df.empty:
         per_cluster = (
             markers_df.sort_values(["cluster", "scores"], ascending=[True, False])
@@ -1120,6 +1181,51 @@ def plot_scrna_top_markers_bar(
     ax.set_title(title)
     ax.set_xlabel("log fold change" if values.name == "logfoldchanges" else "marker score")
     return _save_current_figure(outpath), top_df
+
+
+def _count_significant_scrna_rows(df: pd.DataFrame, *, padj_threshold: float) -> int:
+    p_col = _pvalue_column(df)
+    if p_col:
+        return int(len(df.loc[_sanitize_pvalues(df[p_col]) <= padj_threshold]))
+    return int(len(df.loc[df["scores"].abs() >= df["scores"].abs().quantile(0.9)]))
+
+
+def plot_within_cluster_marker_panels(
+    df: pd.DataFrame,
+    outpath: Path,
+    *,
+    top_genes: int,
+) -> tuple[Path, pd.DataFrame]:
+    sort_cols = ["cluster", "comparison_id", "pvals_adj", "scores"] if "pvals_adj" in df.columns else ["cluster", "comparison_id", "scores"]
+    ascending = [True, True, True, False] if "pvals_adj" in df.columns else [True, True, False]
+    grouped = (
+        df.sort_values(sort_cols, ascending=ascending)
+        .groupby(["cluster", "comparison_id"], as_index=False, group_keys=False)
+        .head(max(1, top_genes))
+        .reset_index(drop=True)
+    )
+    panel_keys = list(grouped[["cluster", "comparison_id"]].drop_duplicates().itertuples(index=False, name=None))
+    fig, axes = plt.subplots(
+        len(panel_keys),
+        1,
+        figsize=(8.5, max(3.4, 2.8 * len(panel_keys))),
+        squeeze=False,
+    )
+    for ax, (cluster, comparison_id) in zip(axes.flatten(), panel_keys):
+        subset = grouped.loc[
+            (grouped["cluster"].astype(str) == str(cluster))
+            & (grouped["comparison_id"].astype(str) == str(comparison_id))
+        ].copy()
+        value_col = "logfoldchanges" if "logfoldchanges" in subset.columns and subset["logfoldchanges"].notna().any() else "scores"
+        values = pd.to_numeric(subset[value_col], errors="coerce").fillna(0.0)
+        colors = [PLOT_COLORS["up"] if value >= 0 else PLOT_COLORS["down"] for value in values.iloc[::-1]]
+        ax.barh(subset.iloc[::-1]["names"], values.iloc[::-1], color=colors)
+        label = f"Cluster {cluster}: {comparison_id.replace('__vs__', ' vs ')}"
+        ax.set_title(label)
+        ax.axvline(0, color=PLOT_COLORS["spine"], linewidth=1)
+        ax.set_xlabel("log fold change" if value_col == "logfoldchanges" else "marker score")
+    fig.tight_layout()
+    return _save_current_figure(outpath), grouped
 
 
 def plot_marker_rank_bars(
@@ -1394,6 +1500,7 @@ def render_scrna_outputs(
     tables_dir = output_dir / "tables"
 
     contrast_df = bundle.scrna_contrast_df
+    within_cluster_df = bundle.scrna_within_cluster_contrast_df
     markers_df = bundle.scrna_markers_df
     total_rows = 0
 
@@ -1416,16 +1523,33 @@ def render_scrna_outputs(
         )
         artifacts.figure_paths.append(bar_path)
         artifacts.table_paths.append(_write_csv(tables_dir / "top_markers.csv", top_markers))
-        artifacts.n_significant = int(
-            len(
-                contrast_df.loc[
-                    (_sanitize_pvalues(contrast_df[_pvalue_column(contrast_df)]) <= args.padj_threshold)
-                    if _pvalue_column(contrast_df)
-                    else contrast_df["scores"].abs() >= contrast_df["scores"].abs().quantile(0.9)
-                ]
-            )
+        artifacts.n_significant += _count_significant_scrna_rows(
+            contrast_df,
+            padj_threshold=args.padj_threshold,
         )
         artifacts.top_table_preview = contrast_top.head(args.top_genes)
+
+    if within_cluster_df is not None:
+        total_rows += int(len(within_cluster_df))
+        panel_path, top_by_panel = plot_within_cluster_marker_panels(
+            within_cluster_df,
+            figures_dir / "within_cluster_marker_panels.png",
+            top_genes=max(1, min(args.top_genes, 6)),
+        )
+        artifacts.figure_paths.append(panel_path)
+        artifacts.table_paths.append(_write_csv(tables_dir / "within_cluster_top_markers.csv", top_by_panel))
+        artifacts.n_significant += _count_significant_scrna_rows(
+            within_cluster_df,
+            padj_threshold=args.padj_threshold,
+        )
+        artifacts.mode_details["within_cluster_comparisons"] = int(
+            within_cluster_df[["cluster", "comparison_id"]].drop_duplicates().shape[0]
+        )
+        artifacts.mode_details["within_cluster_clusters"] = int(
+            within_cluster_df["cluster"].astype(str).nunique()
+        )
+        if artifacts.top_table_preview is None:
+            artifacts.top_table_preview = top_by_panel.head(args.top_genes)
 
     if markers_df is not None:
         total_rows += int(len(markers_df))
@@ -1455,40 +1579,45 @@ def render_scrna_outputs(
         artifacts.notes.append(f"Skipped enhanced scRNA plots: {exc}")
         return
 
-    selected_genes = _top_scrna_genes(contrast_df, markers_df, args.top_genes)
+    selected_genes = _top_scrna_genes(contrast_df, within_cluster_df, markers_df, args.top_genes)
     available_genes = [gene for gene in selected_genes if gene in adata.var_names]
     if not available_genes:
         artifacts.notes.append("Skipped enhanced scRNA plots because selected genes were not present in AnnData.")
         return
 
-    groupby = _infer_scrna_groupby(adata)
-    if not groupby:
+    if within_cluster_df is not None and not within_cluster_df.empty:
         artifacts.notes.append(
-            "Skipped scRNA marker dotplot and heatmap because no suitable grouping column was found in AnnData."
+            "Skipped scRNA dotplot and heatmap because within-cluster contrast inputs do not define a single grouping axis."
         )
     else:
-        genes_for_group_plots = available_genes[: min(10, len(available_genes))]
-        try:
-            artifacts.figure_paths.append(
-                plot_manual_dotplot(
-                    adata,
-                    genes_for_group_plots,
-                    groupby,
-                    figures_dir / "marker_dotplot.png",
-                )
+        groupby = _infer_scrna_groupby(adata)
+        if not groupby:
+            artifacts.notes.append(
+                "Skipped scRNA marker dotplot and heatmap because no suitable grouping column was found in AnnData."
             )
-            artifacts.figure_paths.append(
-                plot_manual_heatmap(
-                    adata,
-                    genes_for_group_plots,
-                    groupby,
-                    figures_dir / "marker_heatmap.png",
+        else:
+            genes_for_group_plots = available_genes[: min(10, len(available_genes))]
+            try:
+                artifacts.figure_paths.append(
+                    plot_manual_dotplot(
+                        adata,
+                        genes_for_group_plots,
+                        groupby,
+                        figures_dir / "marker_dotplot.png",
+                    )
                 )
-            )
-            artifacts.groupby_used = groupby
-            artifacts.enhanced_inputs_used.append("adata")
-        except Exception as exc:
-            artifacts.notes.append(f"Skipped scRNA dotplot/heatmap: {exc}")
+                artifacts.figure_paths.append(
+                    plot_manual_heatmap(
+                        adata,
+                        genes_for_group_plots,
+                        groupby,
+                        figures_dir / "marker_heatmap.png",
+                    )
+                )
+                artifacts.groupby_used = groupby
+                artifacts.enhanced_inputs_used.append("adata")
+            except Exception as exc:
+                artifacts.notes.append(f"Skipped scRNA dotplot/heatmap: {exc}")
 
     try:
         artifacts.figure_paths.append(
@@ -1515,6 +1644,7 @@ def _markdown_image_list(figure_paths: list[Path]) -> list[str]:
         "mean_expression_comparison.png": "Mean Expression Comparison",
         "contrast_volcano.png": "scRNA Contrast Volcano",
         "top_markers_bar.png": "Top scRNA Markers",
+        "within_cluster_marker_panels.png": "Within-Cluster Marker Panels",
         "marker_rank_bars.png": "Marker Rank Bars",
         "marker_dotplot.png": "Marker Dotplot",
         "marker_heatmap.png": "Marker Heatmap",
@@ -1552,6 +1682,9 @@ def render_markdown_report(
         metadata["Bulk display rows"] = str(artifacts.mode_details.get("bulk_display_rows", artifacts.n_input_rows))
     if artifacts.groupby_used:
         metadata["scRNA grouping column"] = artifacts.groupby_used
+    if artifacts.mode_details.get("within_cluster_comparisons"):
+        metadata["Within-cluster comparisons"] = str(artifacts.mode_details["within_cluster_comparisons"])
+        metadata["Within-cluster clusters"] = str(artifacts.mode_details.get("within_cluster_clusters", 0))
     header = generate_report_header(
         title="ClawBio Differential Visualisation Report",
         skill_name="diffviz",
@@ -1580,11 +1713,32 @@ def render_markdown_report(
         lines.append("### Cohort Composition")
         for group_name, group_count in bulk_group_counts.items():
             lines.append(f"- {group_name}: **{group_count}** samples")
+    if artifacts.mode_details.get("within_cluster_comparisons"):
+        lines.append(f"- Within-cluster comparisons: **{artifacts.mode_details['within_cluster_comparisons']}**")
+        lines.append(f"- Clusters with within-cluster results: **{artifacts.mode_details.get('within_cluster_clusters', 0)}**")
 
     if artifacts.top_table_preview is not None and not artifacts.top_table_preview.empty:
         lines.extend(["", "## Top Features", ""])
         preview = artifacts.top_table_preview.head(min(10, len(artifacts.top_table_preview))).copy()
-        preview_cols = [col for col in preview.columns if col in {"gene", "names", "cluster", "log2FoldChange", "logfoldchanges", "scores", "padj", "pvals_adj"}]
+        preview_cols = [
+            col
+            for col in preview.columns
+            if col
+            in {
+                "gene",
+                "names",
+                "cluster",
+                "comparison_id",
+                "group1",
+                "group2",
+                "groupby",
+                "log2FoldChange",
+                "logfoldchanges",
+                "scores",
+                "padj",
+                "pvals_adj",
+            }
+        ]
         preview = preview[preview_cols]
         lines.append("| " + " | ".join(preview.columns) + " |")
         lines.append("|" + "|".join(["---"] * len(preview.columns)) + "|")
@@ -1841,7 +1995,20 @@ body {
             col
             for col in preview.columns
             if col
-            in {"gene", "names", "cluster", "log2FoldChange", "logfoldchanges", "scores", "padj", "pvals_adj"}
+            in {
+                "gene",
+                "names",
+                "cluster",
+                "comparison_id",
+                "group1",
+                "group2",
+                "groupby",
+                "log2FoldChange",
+                "logfoldchanges",
+                "scores",
+                "padj",
+                "pvals_adj",
+            }
         ]
         preview = preview[preview_cols]
         builder.add_table_wrapped(preview.columns.tolist(), preview.astype(str).values.tolist())
@@ -1905,6 +2072,8 @@ def build_result_json(
             "n_significant": artifacts.n_significant,
             "bulk_display_rows": artifacts.mode_details.get("bulk_display_rows"),
             "bulk_display_filter": artifacts.mode_details.get("bulk_display_filter", {}),
+            "within_cluster_comparisons": artifacts.mode_details.get("within_cluster_comparisons"),
+            "within_cluster_clusters": artifacts.mode_details.get("within_cluster_clusters"),
             "figures_generated": [path.name for path in artifacts.figure_paths],
             "enhanced_inputs_used": sorted(set(artifacts.enhanced_inputs_used)),
         },

@@ -20,6 +20,7 @@ import os
 import shlex
 import sys
 from datetime import datetime, timezone
+from itertools import combinations
 from pathlib import Path
 from typing import Any
 
@@ -235,82 +236,45 @@ def _recover_counts_source(adata, *, expected_input: str) -> tuple[Any, str]:
     return counts_adata, ""
 
 
-def resolve_contrast_request(args: argparse.Namespace) -> tuple[dict[str, str] | None, dict[str, Any]]:
-    """Resolve canonical + deprecated contrast-analysis flags."""
-    def _pick(primary: Any, legacy: Any, *, primary_name: str, legacy_name: str) -> Any:
-        if primary is not None and legacy is not None and primary != legacy:
+def resolve_contrast_request(args: argparse.Namespace) -> dict[str, Any] | None:
+    """Resolve the unified contrast-analysis flags."""
+    groupby = getattr(args, "contrast_groupby", None)
+    scope = getattr(args, "contrast_scope", None)
+    clusterby = getattr(args, "contrast_clusterby", None)
+    top_genes = getattr(args, "contrast_top_genes", None)
+
+    if groupby is None:
+        extra_flags = []
+        if scope is not None:
+            extra_flags.append("--contrast-scope")
+        if clusterby is not None:
+            extra_flags.append("--contrast-clusterby")
+        if top_genes is not None:
+            extra_flags.append("--contrast-top-genes")
+        if extra_flags:
             raise ValueError(
-                f"Conflicting values for {primary_name} and deprecated {legacy_name}. "
-                f"Use only {primary_name}."
+                "--contrast-groupby is required when using "
+                f"{', '.join(extra_flags)}."
             )
-        return primary if primary is not None else legacy
+        return None
 
-    groupby = _pick(
-        getattr(args, "contrast_groupby", None),
-        getattr(args, "de_groupby", None),
-        primary_name="--contrast-groupby",
-        legacy_name="--de-groupby",
-    )
-    group1 = _pick(
-        getattr(args, "contrast_group1", None),
-        getattr(args, "de_group1", None),
-        primary_name="--contrast-group1",
-        legacy_name="--de-group1",
-    )
-    group2 = _pick(
-        getattr(args, "contrast_group2", None),
-        getattr(args, "de_group2", None),
-        primary_name="--contrast-group2",
-        legacy_name="--de-group2",
-    )
-    top_genes = _pick(
-        getattr(args, "contrast_top_genes", None),
-        getattr(args, "de_top_genes", None),
-        primary_name="--contrast-top-genes",
-        legacy_name="--de-top-genes",
-    )
-    volcano = bool(getattr(args, "contrast_volcano", False) or getattr(args, "de_volcano", False))
-    used_legacy_flags = any(
-        getattr(args, attr, None) is not None
-        for attr in ("de_groupby", "de_group1", "de_group2", "de_top_genes")
-    ) or bool(getattr(args, "de_volcano", False))
-
-    if top_genes is None:
-        top_genes = 50
-
-    provided = {
-        "--contrast-groupby": groupby,
-        "--contrast-group1": group1,
-        "--contrast-group2": group2,
-    }
-    provided_count = sum(1 for value in provided.values() if value)
-    if provided_count == 0:
-        if volcano:
-            raise ValueError(
-                "--contrast-volcano requires --contrast-groupby, --contrast-group1, and --contrast-group2."
-            )
-        return None, {"top_genes": int(top_genes), "volcano": volcano, "used_legacy_flags": used_legacy_flags}
-    if provided_count != 3:
-        missing = [flag for flag, value in provided.items() if not value]
-        raise ValueError(
-            "Contrastive marker analysis requires --contrast-groupby, "
-            "--contrast-group1, and --contrast-group2 together. "
-            f"Missing: {', '.join(missing)}."
-        )
-    if int(top_genes) < 1:
+    resolved_scope = str(scope or "dataset")
+    resolved_clusterby = str(clusterby or "leiden")
+    resolved_top_genes = 50 if top_genes is None else int(top_genes)
+    if resolved_top_genes < 1:
         raise ValueError("--contrast-top-genes must be >= 1.")
+    if resolved_scope == "dataset" and clusterby is not None:
+        raise ValueError(
+            "--contrast-clusterby can only be used when "
+            "--contrast-scope is `within-cluster` or `both`."
+        )
 
-    request = {
+    return {
         "groupby": str(groupby),
-        "group1": str(group1),
-        "group2": str(group2),
+        "scope": resolved_scope,
+        "clusterby": resolved_clusterby,
+        "top_genes": resolved_top_genes,
     }
-    extra = {
-        "top_genes": int(top_genes),
-        "volcano": volcano,
-        "used_legacy_flags": used_legacy_flags,
-    }
-    return request, extra
 
 
 def _cluster_sort_key(cluster: str) -> tuple[int, Any]:
@@ -588,93 +552,289 @@ def run_markers(adata, top_markers: int = 10):
     return adata, markers_all, markers_top
 
 
-def run_contrastive_markers(
+def _empty_contrast_summary(*, groupby: str = "", clusterby: str = "") -> dict[str, Any]:
+    return {
+        "requested": False,
+        "enabled": False,
+        "groupby": groupby,
+        "clusterby": clusterby,
+        "n_contrasts": 0,
+        "n_rows_full": 0,
+        "full_table": "",
+        "top_table": "",
+        "top_gene_names": [],
+        "skipped_contrasts": 0,
+        "n_clusters_with_results": 0,
+    }
+
+
+def _obs_string_series(adata, column: str) -> pd.Series:
+    return adata.obs[column].astype("string")
+
+
+def _validate_groupby_column(
+    adata,
+    groupby: str,
+    *,
+    label: str = "Contrastive marker",
+) -> tuple[pd.Series, list[str]]:
+    if groupby not in adata.obs.columns:
+        available_cols = ", ".join(sorted(map(str, adata.obs.columns.tolist())))
+        raise ValueError(
+            f"{label} groupby column not found in adata.obs: {groupby}. "
+            f"Available columns: {available_cols}."
+        )
+
+    groups = _obs_string_series(adata, groupby)
+    available_groups = sorted({str(value) for value in groups.dropna().tolist()})
+    if len(available_groups) < 2:
+        raise ValueError(
+            f"{label} groupby column must contain at least 2 observed groups. "
+            f"Received {groupby} with groups: {', '.join(available_groups) or 'none'}."
+        )
+    return groups, available_groups
+
+
+def _validate_clusterby_column(adata, clusterby: str) -> pd.Series:
+    if clusterby not in adata.obs.columns:
+        available_cols = ", ".join(sorted(map(str, adata.obs.columns.tolist())))
+        raise ValueError(
+            f"Within-cluster contrast column not found in adata.obs: {clusterby}. "
+            f"Available columns: {available_cols}."
+        )
+    return _obs_string_series(adata, clusterby)
+
+
+def _comparison_id(group1: str, group2: str) -> str:
+    return f"{group1}__vs__{group2}"
+
+
+def _run_pairwise_contrast(
     adata,
     *,
     groupby: str,
     group1: str,
     group2: str,
-    top_genes: int,
-) -> tuple[pd.DataFrame, pd.DataFrame, dict[str, Any]]:
-    """Run two-group contrastive markers with Wilcoxon and return full/top tables plus summary."""
+) -> tuple[pd.DataFrame, dict[str, int]]:
+    """Run one Wilcoxon contrast and return the full result table."""
     sc = _import_scanpy()
 
     if group1 == group2:
-        raise ValueError("--contrast-group1 and --contrast-group2 must be different values.")
+        raise ValueError("Contrastive marker comparisons require two different groups.")
 
-    if groupby not in adata.obs.columns:
-        available_cols = ", ".join(sorted(map(str, adata.obs.columns.tolist())))
+    groups = _obs_string_series(adata, groupby)
+    mask = groups.isin([group1, group2]).fillna(False).to_numpy()
+    adata_contrast = adata[mask].copy()
+    subset_groups = groups[mask].astype(str).tolist()
+    n_group1 = subset_groups.count(group1)
+    n_group2 = subset_groups.count(group2)
+    if n_group1 < 2 or n_group2 < 2:
         raise ValueError(
-            f"Contrastive marker groupby column not found in adata.obs: {groupby}. "
-            f"Available columns: {available_cols}."
-        )
-
-    groups = adata.obs[groupby].astype(str)
-    available_groups = sorted(groups.dropna().unique().tolist())
-    missing_groups = [g for g in (group1, group2) if g not in available_groups]
-    if missing_groups:
-        raise ValueError(
-            f"Contrastive marker group value(s) not found in {groupby}: {', '.join(missing_groups)}. "
-            f"Available groups: {', '.join(available_groups)}."
-        )
-
-    mask = groups.isin([group1, group2]).to_numpy()
-    if int(mask.sum()) < 2:
-        raise ValueError(
-            f"Contrastive marker analysis requires at least 2 cells across {group1} and {group2} in {groupby}."
-        )
-
-    adata_de = adata[mask].copy()
-    de_groups = groups[mask].tolist()
-    adata_de.obs["_de_group"] = pd.Categorical(
-        de_groups,
-        categories=[group1, group2],
-        ordered=True,
-    )
-
-    n_group1 = int(sum(1 for g in de_groups if g == group1))
-    n_group2 = int(sum(1 for g in de_groups if g == group2))
-    if n_group1 == 0 or n_group2 == 0:
-        raise ValueError(
-            "Contrastive marker analysis requires both groups to have cells. "
+            "Contrastive marker comparisons require at least 2 cells per group. "
             f"Got {group1}={n_group1}, {group2}={n_group2}."
         )
 
+    adata_contrast.obs["_contrast_group"] = pd.Categorical(
+        subset_groups,
+        categories=[group1, group2],
+        ordered=True,
+    )
     sc.tl.rank_genes_groups(
-        adata_de,
-        groupby="_de_group",
+        adata_contrast,
+        groupby="_contrast_group",
         groups=[group1],
         reference=group2,
         method="wilcoxon",
         pts=True,
     )
-
-    de_full = sc.get.rank_genes_groups_df(adata_de, group=group1).reset_index(drop=True)
-    if de_full.empty:
+    contrast_full = sc.get.rank_genes_groups_df(adata_contrast, group=group1).reset_index(drop=True)
+    if contrast_full.empty:
         raise ValueError(
             f"Contrastive marker analysis did not return any genes for {group1} vs {group2} in {groupby}."
         )
+    return contrast_full, {
+        "n_cells_group1": n_group1,
+        "n_cells_group2": n_group2,
+    }
 
-    de_top = (
-        de_full.sort_values("scores", ascending=False)
+
+def _prepend_contrast_metadata(
+    df: pd.DataFrame,
+    *,
+    scope: str,
+    groupby: str,
+    group1: str,
+    group2: str,
+    cluster: str | None = None,
+) -> pd.DataFrame:
+    out = df.copy()
+    out.insert(0, "comparison_id", _comparison_id(group1, group2))
+    out.insert(0, "group2", group2)
+    out.insert(0, "group1", group1)
+    out.insert(0, "groupby", groupby)
+    out.insert(0, "scope", scope)
+    if cluster is not None:
+        out.insert(0, "cluster", cluster)
+    return out
+
+
+def _top_contrast_rows(
+    contrast_full: pd.DataFrame,
+    *,
+    group_cols: list[str],
+    top_genes: int,
+) -> pd.DataFrame:
+    if contrast_full.empty:
+        return contrast_full.copy()
+    sort_cols = [*group_cols, "scores"]
+    ascending = [True] * len(group_cols) + [False]
+    return (
+        contrast_full.sort_values(sort_cols, ascending=ascending)
+        .groupby(group_cols, as_index=False, group_keys=False)
         .head(top_genes)
         .reset_index(drop=True)
     )
 
-    summary = {
-        "enabled": True,
-        "groupby": groupby,
-        "group1": group1,
-        "group2": group2,
-        "n_cells_group1": n_group1,
-        "n_cells_group2": n_group2,
-        "n_genes_full": int(len(de_full)),
-        "top_table": "contrastive_markers_top.csv",
-        "full_table": "contrastive_markers_full.csv",
-        "top_gene_names": de_top["names"].dropna().astype(str).tolist(),
-        "volcano_plot": "",
-    }
-    return de_full, de_top, summary
+
+def run_dataset_contrasts(
+    adata,
+    *,
+    groupby: str,
+    top_genes: int,
+) -> tuple[pd.DataFrame, pd.DataFrame, dict[str, Any]]:
+    """Run all pairwise dataset-level contrasts across an obs column."""
+    groups, available_groups = _validate_groupby_column(adata, groupby)
+    group_counts = groups.value_counts(dropna=True)
+    insufficient = [
+        f"{group}={int(group_counts.get(group, 0))}"
+        for group in available_groups
+        if int(group_counts.get(group, 0)) < 2
+    ]
+    if insufficient:
+        raise ValueError(
+            "Dataset-level contrastive markers require at least 2 cells in every observed group of "
+            f"{groupby}. Insufficient groups: {', '.join(insufficient)}."
+        )
+
+    full_parts: list[pd.DataFrame] = []
+    for group1, group2 in combinations(available_groups, 2):
+        contrast_df, _ = _run_pairwise_contrast(
+            adata,
+            groupby=groupby,
+            group1=group1,
+            group2=group2,
+        )
+        full_parts.append(
+            _prepend_contrast_metadata(
+                contrast_df,
+                scope="dataset",
+                groupby=groupby,
+                group1=group1,
+                group2=group2,
+            )
+        )
+
+    contrast_full = pd.concat(full_parts, axis=0, ignore_index=True)
+    contrast_top = _top_contrast_rows(
+        contrast_full,
+        group_cols=["comparison_id"],
+        top_genes=top_genes,
+    )
+    summary = _empty_contrast_summary(groupby=groupby)
+    summary.update(
+        {
+            "requested": True,
+            "enabled": True,
+            "n_contrasts": len(full_parts),
+            "n_rows_full": int(len(contrast_full)),
+            "full_table": "contrastive_markers_full.csv",
+            "top_table": "contrastive_markers_top.csv",
+            "top_gene_names": contrast_top["names"].dropna().astype(str).tolist(),
+        }
+    )
+    return contrast_full, contrast_top, summary
+
+
+def run_within_cluster_contrasts(
+    adata,
+    *,
+    groupby: str,
+    clusterby: str,
+    top_genes: int,
+) -> tuple[pd.DataFrame, pd.DataFrame, dict[str, Any]]:
+    """Run all pairwise contrasts within each cluster/partition."""
+    _, available_groups = _validate_groupby_column(adata, groupby)
+    clusters = _validate_clusterby_column(adata, clusterby)
+    cluster_labels = sorted({str(value) for value in clusters.dropna().tolist()}, key=_cluster_sort_key)
+
+    full_parts: list[pd.DataFrame] = []
+    skipped_contrasts = 0
+    clusters_with_results: set[str] = set()
+    all_pairs = list(combinations(available_groups, 2))
+
+    for cluster in cluster_labels:
+        cluster_mask = (clusters == cluster).fillna(False).to_numpy()
+        cluster_adata = adata[cluster_mask].copy()
+        cluster_groups = _obs_string_series(cluster_adata, groupby)
+        cluster_has_results = False
+        for group1, group2 in all_pairs:
+            n_group1 = int((cluster_groups == group1).sum())
+            n_group2 = int((cluster_groups == group2).sum())
+            if n_group1 < 2 or n_group2 < 2:
+                skipped_contrasts += 1
+                continue
+
+            contrast_df, _ = _run_pairwise_contrast(
+                cluster_adata,
+                groupby=groupby,
+                group1=group1,
+                group2=group2,
+            )
+            full_parts.append(
+                _prepend_contrast_metadata(
+                    contrast_df,
+                    cluster=cluster,
+                    scope="within-cluster",
+                    groupby=groupby,
+                    group1=group1,
+                    group2=group2,
+                )
+            )
+            cluster_has_results = True
+
+        if cluster_has_results:
+            clusters_with_results.add(cluster)
+
+    if full_parts:
+        contrast_full = pd.concat(full_parts, axis=0, ignore_index=True)
+        contrast_top = _top_contrast_rows(
+            contrast_full,
+            group_cols=["cluster", "comparison_id"],
+            top_genes=top_genes,
+        )
+    else:
+        contrast_full = pd.DataFrame()
+        contrast_top = pd.DataFrame()
+
+    summary = _empty_contrast_summary(groupby=groupby, clusterby=clusterby)
+    summary.update(
+        {
+            "requested": True,
+            "enabled": not contrast_full.empty,
+            "n_contrasts": int(
+                contrast_full[["cluster", "comparison_id"]].drop_duplicates().shape[0]
+            )
+            if not contrast_full.empty
+            else 0,
+            "n_rows_full": int(len(contrast_full)),
+            "full_table": "within_cluster_contrastive_markers_full.csv" if not contrast_full.empty else "",
+            "top_table": "within_cluster_contrastive_markers_top.csv" if not contrast_top.empty else "",
+            "top_gene_names": contrast_top["names"].dropna().astype(str).tolist() if not contrast_top.empty else [],
+            "skipped_contrasts": skipped_contrasts,
+            "n_clusters_with_results": len(clusters_with_results),
+        }
+    )
+    return contrast_full, contrast_top, summary
 
 
 def attach_leiden_labels(graph_adata, expression_adata):
@@ -882,97 +1042,16 @@ def write_contrast_tables(
     contrast_full: pd.DataFrame,
     contrast_top: pd.DataFrame,
     tables_dir: Path,
+    *,
+    prefix: str = "contrastive_markers",
 ) -> tuple[Path, Path]:
     """Write contrastive marker full/top tables."""
     tables_dir.mkdir(parents=True, exist_ok=True)
-    contrast_full_path = tables_dir / "contrastive_markers_full.csv"
-    contrast_top_path = tables_dir / "contrastive_markers_top.csv"
+    contrast_full_path = tables_dir / f"{prefix}_full.csv"
+    contrast_top_path = tables_dir / f"{prefix}_top.csv"
     contrast_full.to_csv(contrast_full_path, index=False)
     contrast_top.to_csv(contrast_top_path, index=False)
     return contrast_full_path, contrast_top_path
-
-
-def plot_contrast_volcano(
-    contrast_full: pd.DataFrame,
-    figures_dir: Path,
-    *,
-    group1: str,
-    group2: str,
-) -> Path:
-    """Create contrastive marker volcano plot from full two-group results."""
-    import matplotlib
-
-    matplotlib.use("Agg")
-    import matplotlib.pyplot as plt
-
-    figures_dir.mkdir(parents=True, exist_ok=True)
-
-    if "logfoldchanges" not in contrast_full.columns:
-        raise ValueError("Contrastive markers table missing required column: logfoldchanges")
-
-    p_col = "pvals_adj" if "pvals_adj" in contrast_full.columns else "pvals"
-    if p_col not in contrast_full.columns:
-        raise ValueError("Contrastive markers table missing required p-value column (pvals_adj or pvals).")
-
-    log_fc = pd.to_numeric(contrast_full["logfoldchanges"], errors="coerce").to_numpy(dtype=np.float64)
-    pvals = pd.to_numeric(contrast_full[p_col], errors="coerce").to_numpy(dtype=np.float64)
-    pvals = np.clip(pvals, 1e-300, 1.0)
-    neg_log10 = -np.log10(pvals)
-    finite_mask = np.isfinite(log_fc) & np.isfinite(neg_log10)
-    if int(finite_mask.sum()) == 0:
-        raise ValueError("No finite contrastive marker points available for volcano plot.")
-
-    sig_mask = finite_mask & (pvals < 0.05) & (np.abs(log_fc) >= 1.0)
-    up_mask = sig_mask & (log_fc > 0)
-    down_mask = sig_mask & (log_fc < 0)
-    nonsig_mask = finite_mask & (~sig_mask)
-
-    fig, ax = plt.subplots(figsize=(7.2, 5.6))
-    ax.scatter(
-        log_fc[nonsig_mask],
-        neg_log10[nonsig_mask],
-        s=10,
-        c="#94a3b8",
-        alpha=0.65,
-        edgecolors="none",
-        label="Not significant",
-    )
-    if int(up_mask.sum()) > 0:
-        ax.scatter(
-            log_fc[up_mask],
-            neg_log10[up_mask],
-            s=16,
-            c="#dc2626",
-            alpha=0.85,
-            edgecolors="none",
-            label=f"Up in {group1}",
-        )
-    if int(down_mask.sum()) > 0:
-        ax.scatter(
-            log_fc[down_mask],
-            neg_log10[down_mask],
-            s=16,
-            c="#2563eb",
-            alpha=0.85,
-            edgecolors="none",
-            label=f"Up in {group2}",
-        )
-
-    ax.axvline(-1.0, color="#64748b", linewidth=0.9, linestyle="--")
-    ax.axvline(1.0, color="#64748b", linewidth=0.9, linestyle="--")
-    ax.axhline(-np.log10(0.05), color="#64748b", linewidth=0.9, linestyle="--")
-    ax.set_xlabel("log2 fold change")
-    y_label = "-log10(adjusted p-value)" if p_col == "pvals_adj" else "-log10(p-value)"
-    ax.set_ylabel(y_label)
-    ax.set_title(f"Contrastive Markers Volcano: {group1} vs {group2}")
-    ax.legend(loc="upper right", frameon=False)
-    ax.grid(alpha=0.18, linewidth=0.5)
-
-    plot_path = figures_dir / "contrastive_markers_volcano.png"
-    fig.tight_layout()
-    fig.savefig(plot_path, dpi=180, bbox_inches="tight")
-    plt.close(fig)
-    return plot_path
 
 
 def render_report(
@@ -989,7 +1068,7 @@ def render_report(
     table_paths: dict[str, Path],
     figure_paths: list[Path],
     n_cells_analyzed: int,
-    contrast_summary: dict[str, Any],
+    contrast_summaries: dict[str, dict[str, Any]],
     doublet_summary: dict[str, Any] | None = None,
     annotation_table: pd.DataFrame | None = None,
     annotation_info: dict[str, Any] | None = None,
@@ -1069,43 +1148,45 @@ def render_report(
                 f"(support={row.support_fraction:.2f}, mean_confidence={row.mean_confidence:.2f})"
             )
 
-    lines.extend(["", "## Contrastive Marker Analysis (Two-Group)", ""])
-    top_genes = contrast_summary.get("top_gene_names", [])
-    if contrast_summary.get("enabled"):
-        lines.append(f"- Grouping column: `{contrast_summary['groupby']}`")
-        lines.append(f"- Comparison: `{contrast_summary['group1']}` vs `{contrast_summary['group2']}`")
-        lines.append(
-            f"- Cells in groups: `{contrast_summary['group1']}={contrast_summary['n_cells_group1']}`, "
-            f"`{contrast_summary['group2']}={contrast_summary['n_cells_group2']}`"
-        )
-        lines.append(f"- Genes in full table: **{contrast_summary['n_genes_full']}**")
-        lines.append(f"- Full table: `tables/{contrast_summary['full_table']}`")
-        lines.append(f"- Top table: `tables/{contrast_summary['top_table']}`")
-        volcano_plot_name = str(contrast_summary.get("volcano_plot", "")).strip()
-        if volcano_plot_name:
-            lines.append(f"- Volcano plot: `figures/{volcano_plot_name}`")
-        else:
-            lines.append("- Volcano plot: not generated (use `--contrast-volcano`)")
+    dataset_summary = contrast_summaries["dataset"]
+    within_summary = contrast_summaries["within_cluster"]
+    lines.extend(["", "## Dataset-Level Contrastive Markers", ""])
+    if dataset_summary.get("enabled"):
+        lines.append(f"- Grouping column: `{dataset_summary['groupby']}`")
+        lines.append(f"- Pairwise comparisons run: **{dataset_summary['n_contrasts']}**")
+        lines.append(f"- Genes in full table: **{dataset_summary['n_rows_full']}**")
+        lines.append(f"- Full table: `tables/{dataset_summary['full_table']}`")
+        lines.append(f"- Top table: `tables/{dataset_summary['top_table']}`")
         lines.append("")
-        lines.append("Top contrastive marker genes by score:")
-        if top_genes:
-            lines.extend([f"- `{gene}`" for gene in top_genes[:10]])
-        else:
-            lines.append("- None")
-        if volcano_plot_name:
-            lines.extend(["", f"![Contrastive Marker Volcano](figures/{volcano_plot_name})"])
-        contrast_methods = (
-            "- Contrastive marker analysis: `scanpy.tl.rank_genes_groups` "
-            f"(Wilcoxon, `{contrast_summary['group1']}` vs `{contrast_summary['group2']}`, "
-            f"`groupby={contrast_summary['groupby']}`)"
-        )
-        if volcano_plot_name:
-            contrast_methods += "; volcano plot with thresholds `p<0.05`, `|log2FC|>=1`"
+        lines.append("Top dataset-level contrastive marker genes by score:")
+        lines.extend([f"- `{gene}`" for gene in dataset_summary.get("top_gene_names", [])[:10]] or ["- None"])
+    elif dataset_summary.get("requested"):
+        lines.append("- Requested, but no dataset-level contrasts produced usable results.")
     else:
-        lines.append(
-            "- Not enabled for this run (use `--contrast-groupby --contrast-group1 --contrast-group2`)."
-        )
-        contrast_methods = "- Contrastive marker analysis: not enabled"
+        lines.append("- Not enabled for this run.")
+    lines.append("- Downstream visualization: use `python clawbio.py run diffviz --mode scrna --input <scrna_output_dir>`.")
+
+    lines.extend(["", "## Within-Cluster Contrastive Markers", ""])
+    if within_summary.get("enabled"):
+        lines.append(f"- Grouping column: `{within_summary['groupby']}`")
+        lines.append(f"- Cluster column: `{within_summary['clusterby']}`")
+        lines.append(f"- Valid cluster/comparison pairs: **{within_summary['n_contrasts']}**")
+        lines.append(f"- Clusters with results: **{within_summary['n_clusters_with_results']}**")
+        lines.append(f"- Skipped cluster/comparison pairs: **{within_summary['skipped_contrasts']}**")
+        lines.append(f"- Genes in full table: **{within_summary['n_rows_full']}**")
+        lines.append(f"- Full table: `tables/{within_summary['full_table']}`")
+        lines.append(f"- Top table: `tables/{within_summary['top_table']}`")
+        lines.append("")
+        lines.append("Top within-cluster contrastive marker genes by score:")
+        lines.extend([f"- `{gene}`" for gene in within_summary.get("top_gene_names", [])[:10]] or ["- None"])
+    elif within_summary.get("requested"):
+        lines.append(f"- Grouping column: `{within_summary['groupby']}`")
+        lines.append(f"- Cluster column: `{within_summary['clusterby']}`")
+        lines.append(f"- Skipped cluster/comparison pairs: **{within_summary['skipped_contrasts']}**")
+        lines.append("- Requested, but no cluster-specific comparisons met the minimum 2-cells-per-group threshold.")
+    else:
+        lines.append("- Not enabled for this run.")
+    lines.append("- Downstream visualization: use `diff-visualizer` for cluster/comparison panels from the exported tables.")
 
     lines.extend(["", "## Methods", ""])
     lines.append(
@@ -1140,7 +1221,28 @@ def render_report(
             "- Annotation: "
             f"`CellTypist` model `{annotation_info['model']}` on normalized/log1p full-gene expression"
         )
-    lines.append(contrast_methods)
+    if dataset_summary.get("enabled"):
+        lines.append(
+            "- Dataset-level contrasts: `scanpy.tl.rank_genes_groups` "
+            f"(Wilcoxon, all pairwise contrasts across `groupby={dataset_summary['groupby']}`)"
+        )
+    elif dataset_summary.get("requested"):
+        lines.append(
+            "- Dataset-level contrasts: requested, but no valid pairwise dataset-level contrasts were produced"
+        )
+
+    if within_summary.get("requested"):
+        if within_summary.get("enabled"):
+            lines.append(
+                "- Within-cluster contrasts: `scanpy.tl.rank_genes_groups` "
+                f"(Wilcoxon, all pairwise contrasts across `groupby={within_summary['groupby']}` "
+                f"inside each `{within_summary['clusterby']}` partition)"
+            )
+        lines.append(
+            "- Within-cluster skip rule: comparisons are skipped when either group has fewer than 2 cells in a cluster"
+        )
+    elif not dataset_summary.get("requested"):
+        lines.append("- Contrastive marker analysis: not enabled")
 
     lines.extend(["", "## Reproducibility", "", "See:"])
     lines.append("- `reproducibility/commands.sh`")
@@ -1159,8 +1261,7 @@ def build_repro_command(
     args: argparse.Namespace,
     *,
     resolved_use_rep: str,
-    contrast_request: dict[str, str] | None,
-    contrast_options: dict[str, Any],
+    contrast_request: dict[str, Any] | None,
 ) -> str:
     """Build a reproducible CLI command for commands.sh."""
     parts = ["python", "skills/scrna-orchestrator/scrna_orchestrator.py"]
@@ -1199,11 +1300,10 @@ def build_repro_command(
         parts.extend(["--annotation-model", args.annotation_model])
     if contrast_request:
         parts.extend(["--contrast-groupby", contrast_request["groupby"]])
-        parts.extend(["--contrast-group1", contrast_request["group1"]])
-        parts.extend(["--contrast-group2", contrast_request["group2"]])
-        parts.extend(["--contrast-top-genes", str(contrast_options["top_genes"])])
-        if contrast_options["volcano"]:
-            parts.append("--contrast-volcano")
+        parts.extend(["--contrast-scope", contrast_request["scope"]])
+        if contrast_request["scope"] in {"within-cluster", "both"}:
+            parts.extend(["--contrast-clusterby", contrast_request["clusterby"]])
+        parts.extend(["--contrast-top-genes", str(contrast_request["top_genes"])])
 
     return " ".join(shlex.quote(part) for part in parts)
 
@@ -1218,8 +1318,7 @@ def write_reproducibility(
     figure_paths: list[Path],
     *,
     resolved_use_rep: str,
-    contrast_request: dict[str, str] | None,
-    contrast_options: dict[str, Any],
+    contrast_request: dict[str, Any] | None,
 ) -> None:
     """Write commands.sh, environment.yml, and checksums.sha256."""
     repro_dir = output_dir / "reproducibility"
@@ -1231,7 +1330,6 @@ def write_reproducibility(
         args,
         resolved_use_rep=resolved_use_rep,
         contrast_request=contrast_request,
-        contrast_options=contrast_options,
     )
 
     commands = f"""#!/usr/bin/env bash
@@ -1296,19 +1394,10 @@ def run_pipeline(args: argparse.Namespace) -> dict[str, Any]:
     figures_dir.mkdir(exist_ok=True)
     tables_dir.mkdir(exist_ok=True)
 
-    contrast_request, contrast_options = resolve_contrast_request(args)
-    contrast_summary: dict[str, Any] = {
-        "enabled": False,
-        "groupby": "",
-        "group1": "",
-        "group2": "",
-        "n_cells_group1": 0,
-        "n_cells_group2": 0,
-        "n_genes_full": 0,
-        "top_table": "",
-        "full_table": "",
-        "top_gene_names": [],
-        "volcano_plot": "",
+    contrast_request = resolve_contrast_request(args)
+    contrast_summaries = {
+        "dataset": _empty_contrast_summary(),
+        "within_cluster": _empty_contrast_summary(),
     }
 
     adata, input_path, is_demo, demo_source, input_source, latent_context = load_data(
@@ -1354,14 +1443,26 @@ def run_pipeline(args: argparse.Namespace) -> dict[str, Any]:
 
     contrast_full = None
     contrast_top = None
+    within_cluster_full = None
+    within_cluster_top = None
     if contrast_request:
-        contrast_full, contrast_top, contrast_summary = run_contrastive_markers(
-            adata_markers.copy(),
-            groupby=contrast_request["groupby"],
-            group1=contrast_request["group1"],
-            group2=contrast_request["group2"],
-            top_genes=contrast_options["top_genes"],
-        )
+        if contrast_request["scope"] in {"dataset", "both"}:
+            contrast_full, contrast_top, contrast_summaries["dataset"] = run_dataset_contrasts(
+                adata_markers.copy(),
+                groupby=contrast_request["groupby"],
+                top_genes=contrast_request["top_genes"],
+            )
+        if contrast_request["scope"] in {"within-cluster", "both"}:
+            (
+                within_cluster_full,
+                within_cluster_top,
+                contrast_summaries["within_cluster"],
+            ) = run_within_cluster_contrasts(
+                adata_markers.copy(),
+                groupby=contrast_request["groupby"],
+                clusterby=contrast_request["clusterby"],
+                top_genes=contrast_request["top_genes"],
+            )
 
     table_paths = write_tables(
         adata_graph,
@@ -1370,7 +1471,7 @@ def run_pipeline(args: argparse.Namespace) -> dict[str, Any]:
         doublet_summary=doublet_summary,
         annotation_table=annotation_table,
     )
-    if contrast_request and contrast_full is not None and contrast_top is not None:
+    if contrast_full is not None and contrast_top is not None:
         contrast_full_path, contrast_top_path = write_contrast_tables(
             contrast_full,
             contrast_top,
@@ -1378,17 +1479,17 @@ def run_pipeline(args: argparse.Namespace) -> dict[str, Any]:
         )
         table_paths["contrastive_markers_full"] = contrast_full_path
         table_paths["contrastive_markers_top"] = contrast_top_path
+    if within_cluster_full is not None and within_cluster_top is not None and not within_cluster_full.empty:
+        within_full_path, within_top_path = write_contrast_tables(
+            within_cluster_full,
+            within_cluster_top,
+            tables_dir,
+            prefix="within_cluster_contrastive_markers",
+        )
+        table_paths["within_cluster_contrastive_markers_full"] = within_full_path
+        table_paths["within_cluster_contrastive_markers_top"] = within_top_path
 
     figure_paths = plot_core_figures(adata_graph, adata_markers, markers_top, figures_dir)
-    if contrast_request and contrast_full is not None and contrast_options["volcano"]:
-        volcano_path = plot_contrast_volcano(
-            contrast_full,
-            figures_dir,
-            group1=contrast_summary["group1"],
-            group2=contrast_summary["group2"],
-        )
-        contrast_summary["volcano_plot"] = volcano_path.name
-        figure_paths.append(volcano_path)
 
     n_clusters = int(adata_graph.obs["leiden"].nunique())
     n_cells_analyzed = int(adata_graph.n_obs)
@@ -1420,7 +1521,7 @@ def run_pipeline(args: argparse.Namespace) -> dict[str, Any]:
         table_paths=table_paths,
         figure_paths=figure_paths,
         n_cells_analyzed=n_cells_analyzed,
-        contrast_summary=contrast_summary,
+        contrast_summaries=contrast_summaries,
         doublet_summary=doublet_summary,
         annotation_table=annotation_table,
         annotation_info=annotation_info,
@@ -1460,19 +1561,16 @@ def run_pipeline(args: argparse.Namespace) -> dict[str, Any]:
         "counts_layer": latent_context["counts_layer"],
         "disclaimer": DISCLAIMER,
     }
-    contrast_payload = {
-        "enabled": bool(contrast_summary["enabled"]),
-        "groupby": contrast_summary["groupby"] if contrast_summary["enabled"] else "",
-        "group1": contrast_summary["group1"] if contrast_summary["enabled"] else "",
-        "group2": contrast_summary["group2"] if contrast_summary["enabled"] else "",
-        "n_genes_full": int(contrast_summary["n_genes_full"]) if contrast_summary["enabled"] else 0,
-        "full_table": contrast_summary["full_table"] if contrast_summary["enabled"] else "",
-        "top_table": contrast_summary["top_table"] if contrast_summary["enabled"] else "",
-        "volcano_plot": contrast_summary["volcano_plot"] if contrast_summary["enabled"] else "",
-        "used_legacy_flags": bool(contrast_options["used_legacy_flags"]),
+    data["contrasts"] = {
+        "dataset": {
+            **contrast_summaries["dataset"],
+            "top_gene_names": contrast_summaries["dataset"]["top_gene_names"][:10],
+        },
+        "within_cluster": {
+            **contrast_summaries["within_cluster"],
+            "top_gene_names": contrast_summaries["within_cluster"]["top_gene_names"][:10],
+        },
     }
-    data["contrastive_markers"] = contrast_payload
-    data["de"] = contrast_payload.copy()
     if doublet_summary is not None:
         doublet_table = table_paths.get("doublet_summary")
         data["doublet"] = {
@@ -1505,7 +1603,6 @@ def run_pipeline(args: argparse.Namespace) -> dict[str, Any]:
         figure_paths=figure_paths,
         resolved_use_rep=latent_context["resolved_use_rep"],
         contrast_request=contrast_request,
-        contrast_options=contrast_options,
     )
 
     return {
@@ -1520,7 +1617,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
             "ClawBio scRNA Orchestrator — Scanpy QC/clustering/markers with optional "
-            "doublet detection, CellTypist annotation, and contrastive marker analysis"
+            "doublet detection, CellTypist annotation, and unified contrastive marker analysis"
         ),
     )
     parser.add_argument(
@@ -1565,30 +1662,24 @@ def parse_args() -> argparse.Namespace:
         default=DEFAULT_CELLTYPIST_MODEL,
         help="Local CellTypist model name or path (used with --annotate celltypist)",
     )
-    parser.add_argument("--contrast-groupby", default=None, help="obs column for two-group contrastive markers")
-    parser.add_argument("--contrast-group1", default=None, help="Group 1 value for contrastive markers")
-    parser.add_argument("--contrast-group2", default=None, help="Group 2 reference value for contrastive markers")
+    parser.add_argument("--contrast-groupby", default=None, help="obs column for pairwise contrastive marker analysis")
+    parser.add_argument(
+        "--contrast-scope",
+        choices=("dataset", "within-cluster", "both"),
+        default=None,
+        help="Run dataset-level contrasts, within-cluster contrasts, or both",
+    )
+    parser.add_argument(
+        "--contrast-clusterby",
+        default=None,
+        help="Cluster/partition column for within-cluster contrasts (defaults to leiden)",
+    )
     parser.add_argument(
         "--contrast-top-genes",
         type=int,
         default=None,
         help="Top contrastive marker genes to include in the summary table",
     )
-    parser.add_argument(
-        "--contrast-volcano",
-        action="store_true",
-        help="Generate optional contrastive markers volcano plot",
-    )
-    parser.add_argument("--de-groupby", default=None, help="Deprecated alias for --contrast-groupby")
-    parser.add_argument("--de-group1", default=None, help="Deprecated alias for --contrast-group1")
-    parser.add_argument("--de-group2", default=None, help="Deprecated alias for --contrast-group2")
-    parser.add_argument(
-        "--de-top-genes",
-        type=int,
-        default=None,
-        help="Deprecated alias for --contrast-top-genes",
-    )
-    parser.add_argument("--de-volcano", action="store_true", help="Deprecated alias for --contrast-volcano")
     return parser.parse_args()
 
 

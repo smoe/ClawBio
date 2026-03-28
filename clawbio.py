@@ -297,7 +297,7 @@ SKILLS = {
     "scrna": {
         "script": SKILLS_DIR / "scrna-orchestrator" / "scrna_orchestrator.py",
         "demo_args": ["--demo"],
-        "description": "scRNA Orchestrator (Scanpy QC, doublet detection, clustering, annotation, optional latent downstream mode, contrastive markers)",
+        "description": "scRNA Orchestrator (Scanpy QC, doublet detection, clustering, annotation, optional latent downstream mode, dataset-level + within-cluster contrastive markers)",
         "allowed_extra_flags": {
             "--min-genes",
             "--min-cells",
@@ -310,15 +310,9 @@ SKILLS = {
             "--random-state",
             "--top-markers",
             "--contrast-groupby",
-            "--contrast-group1",
-            "--contrast-group2",
+            "--contrast-scope",
+            "--contrast-clusterby",
             "--contrast-top-genes",
-            "--contrast-volcano",
-            "--de-groupby",
-            "--de-group1",
-            "--de-group2",
-            "--de-top-genes",
-            "--de-volcano",
             "--doublet-method",
             "--annotate",
             "--annotation-model",
@@ -1027,39 +1021,20 @@ def main():
         help="obs column for contrastive marker analysis (scrna skill)",
     )
     run_parser.add_argument(
-        "--contrast-group1",
+        "--contrast-scope",
         default=None,
-        help="Group 1 value for contrastive marker analysis (scrna skill)",
+        help="Contrast scope: dataset, within-cluster, or both (scrna skill)",
     )
     run_parser.add_argument(
-        "--contrast-group2",
+        "--contrast-clusterby",
         default=None,
-        help="Group 2 reference value for contrastive marker analysis (scrna skill)",
+        help="Cluster/partition column for within-cluster contrasts (scrna skill)",
     )
-    run_parser.add_argument("--de-groupby", default=None, help="Deprecated alias for --contrast-groupby (scrna skill)")
-    run_parser.add_argument("--de-group1", default=None, help="Deprecated alias for --contrast-group1 (scrna skill)")
-    run_parser.add_argument("--de-group2", default=None, help="Deprecated alias for --contrast-group2 (scrna skill)")
     run_parser.add_argument(
         "--contrast-top-genes",
         type=int,
         default=None,
         help="Top contrastive marker genes in summary table (scrna skill)",
-    )
-    run_parser.add_argument(
-        "--de-top-genes",
-        type=int,
-        default=None,
-        help="Deprecated alias for --contrast-top-genes (scrna skill)",
-    )
-    run_parser.add_argument(
-        "--contrast-volcano",
-        action="store_true",
-        help="Generate contrastive markers volcano plot (scrna skill)",
-    )
-    run_parser.add_argument(
-        "--de-volcano",
-        action="store_true",
-        help="Deprecated alias for --contrast-volcano (scrna skill)",
     )
     run_parser.add_argument(
         "--doublet-method",
@@ -1219,24 +1194,12 @@ def main():
             extra.extend(["--accelerator", args.accelerator])
         if getattr(args, "contrast_groupby", None):
             extra.extend(["--contrast-groupby", args.contrast_groupby])
-        if getattr(args, "contrast_group1", None):
-            extra.extend(["--contrast-group1", args.contrast_group1])
-        if getattr(args, "contrast_group2", None):
-            extra.extend(["--contrast-group2", args.contrast_group2])
+        if getattr(args, "contrast_scope", None):
+            extra.extend(["--contrast-scope", args.contrast_scope])
+        if getattr(args, "contrast_clusterby", None):
+            extra.extend(["--contrast-clusterby", args.contrast_clusterby])
         if getattr(args, "contrast_top_genes", None) is not None:
             extra.extend(["--contrast-top-genes", str(args.contrast_top_genes)])
-        if getattr(args, "contrast_volcano", False):
-            extra.append("--contrast-volcano")
-        if getattr(args, "de_groupby", None):
-            extra.extend(["--de-groupby", args.de_groupby])
-        if getattr(args, "de_group1", None):
-            extra.extend(["--de-group1", args.de_group1])
-        if getattr(args, "de_group2", None):
-            extra.extend(["--de-group2", args.de_group2])
-        if getattr(args, "de_top_genes", None) is not None:
-            extra.extend(["--de-top-genes", str(args.de_top_genes)])
-        if getattr(args, "de_volcano", False):
-            extra.append("--de-volcano")
         if getattr(args, "doublet_method", None):
             extra.extend(["--doublet-method", args.doublet_method])
         if getattr(args, "annotate", None):

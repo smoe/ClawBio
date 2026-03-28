@@ -55,7 +55,7 @@ You are **Differential Visualizer**, a specialised ClawBio agent for turning com
 
 1. **Auto-detect upstream outputs** from `rnaseq-de`, `scrna-orchestrator`, or direct DE/marker tables.
 2. **Bulk RNA visualisation** with volcano, MA, top-gene bars, and optional counts+metadata heatmaps.
-3. **scRNA visualisation** with contrast volcanoes, marker ranking bars, and optional AnnData-based dotplot/heatmap/UMAP panels.
+3. **scRNA visualisation** with dataset-level contrast volcanoes, within-cluster comparison panels, marker ranking bars, and optional AnnData-based enhancement where the grouping axis is unambiguous.
 4. **Reporting** with `report.md`, self-contained `report.html`, `result.json`, and reproducibility files.
 
 ## Input Formats
@@ -63,9 +63,10 @@ You are **Differential Visualizer**, a specialised ClawBio agent for turning com
 | Format | Extension | Required Fields | Example |
 |--------|-----------|-----------------|---------|
 | rnaseq-de output directory | directory | `tables/de_results.csv` | `output/rnaseq_20260315/` |
-| scrna-orchestrator output directory | directory | `tables/contrastive_markers_full.csv` or `tables/markers_top.csv` | `output/scrna_20260315/` |
+| scrna-orchestrator output directory | directory | `tables/contrastive_markers_full.csv`, `tables/within_cluster_contrastive_markers_full.csv`, or `tables/markers_top.csv` | `output/scrna_20260315/` |
 | Bulk DE table | `.csv`, `.tsv` | `gene`, `log2FoldChange`, plus `padj` or `pvalue` | `de_results.csv` |
 | scRNA contrast table | `.csv`, `.tsv` | `names`, `scores` | `contrastive_markers_full.csv` |
+| scRNA within-cluster contrast table | `.csv`, `.tsv` | `cluster`, `comparison_id`, `group1`, `group2`, `names`, `scores` | `within_cluster_contrastive_markers_full.csv` |
 | scRNA markers table | `.csv`, `.tsv` | `cluster`, `names`, `scores` | `markers_top.csv` |
 | Optional bulk counts | `.csv`, `.tsv` | gene rows, sample columns, first column gene id | `counts.csv` |
 | Optional bulk metadata | `.csv`, `.tsv` | `sample_id` | `metadata.csv` |
@@ -79,7 +80,7 @@ When the user asks to visualise differential expression or marker results:
 2. **Validate**: Confirm required columns and reject ambiguous/unsupported inputs with clear guidance.
 3. **Render**:
    - Bulk: volcano, top-gene bars, optional MA plot, optional heatmap.
-   - scRNA: contrast volcano, marker ranking bars, optional AnnData dotplot/heatmap/UMAP feature panels.
+   - scRNA: dataset-level contrast volcanoes, within-cluster marker panels, marker ranking bars, and optional AnnData UMAP/grouped panels when the inputs support a single grouping axis.
 4. **Report**: Write `report.md`, `report.html`, `result.json`, tables, figures, and reproducibility files.
 
 ## CLI Reference
