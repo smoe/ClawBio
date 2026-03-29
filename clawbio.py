@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """
 clawbio.py — ClawBio Bioinformatics Skills Runner
-==================================================
 Standalone CLI and importable module for running ClawBio skills.
 
 Usage:
@@ -566,6 +565,18 @@ SKILLS = {
         "allowed_extra_flags": {
             "--platform", "--meta", "--group-col", "--contrast",
             "--fdr", "--fc", "--top-n", "--test",
+        },
+        "no_input_required": True,
+        "accepts_genotypes": False,
+    },
+    "gwas-pipe": {
+        "script": SKILLS_DIR / "gwas-pipeline" / "gwas_pipeline.py",
+        "demo_args": ["--demo"],
+        "description": "GWAS pipeline — PLINK2 QC + REGENIE two-step association (Manhattan, QQ, lead variants)",
+        "allowed_extra_flags": {
+            "--bed", "--bgen", "--pheno", "--covar",
+            "--trait-type", "--trait",
+            "--geno", "--mind", "--maf", "--hwe",
         },
         "no_input_required": True,
         "accepts_genotypes": False,
