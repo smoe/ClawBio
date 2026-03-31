@@ -587,20 +587,6 @@ ClawBio follows [Semantic Versioning](https://semver.org/). The current release 
 
 ---
 
-## Citation
-
-ClawBio is accompanied by a peer-reviewed publication in *Nature Biotechnology* (Correspondence). If you use ClawBio in your research, please cite:
-
-```bibtex
-@article{corpas_clawbio_2026,
-  author  = {Corpas, Manuel},
-  title   = {ClawBio: an open-source skill library for reproducible agentic bioinformatics},
-  journal = {Nature Biotechnology},
-  year    = {2026},
-  note    = {Correspondence}
-}
-```
-
 ## Links
 
 - **Try RoboTerri**: [t.me/RoboTerri_bot](https://t.me/RoboTerri_bot) -- query a real genome on Telegram, no install needed
