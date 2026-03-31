@@ -1,4 +1,10 @@
 <p align="center">
+  <a href="https://lu.ma/clawbio-hackathon">
+    <img src="img/westminster-hackathon.png" alt="ClawBio Hackathon, University of Westminster, London, Thursday 23 April, 12:00-19:00" width="600">
+  </a>
+</p>
+
+<p align="center">
   <img src="img/clawbio-social-preview.png" alt="ClawBio" width="600">
 </p>
 
