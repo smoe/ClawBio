@@ -1,14 +1,8 @@
 <p align="center">
-  <a href="GENOMEBOOK/">
-    <img src="img/genomebook-encode-london.jpeg" alt="ClawBio Genomebook — Agentic Genomics, Encode London, 20-22 March" width="600">
-  </a>
-</p>
-
-<p align="center">
   <img src="img/clawbio-social-preview.png" alt="ClawBio" width="600">
 </p>
 
-<h3 align="center">🦖 ClawBio</h3>
+<h3 align="center">ClawBio</h3>
 
 <p align="center">
   <strong>The first bioinformatics-native AI agent skill library.</strong><br>
@@ -19,7 +13,7 @@
   <a href="https://github.com/ClawBio/ClawBio/actions/workflows/ci.yml"><img src="https://github.com/ClawBio/ClawBio/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="#quick-start"><img src="https://img.shields.io/badge/python-3.10+-blue?logo=python&logoColor=white" alt="Python 3.10+"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="MIT License"></a>
-  <a href="https://clawhub.ai"><img src="https://img.shields.io/badge/ClawHub-39_skills-orange" alt="ClawHub Skills"></a>
+  <a href="https://clawhub.ai"><img src="https://img.shields.io/badge/ClawHub-40+_skills-orange" alt="ClawHub Skills"></a>
   <a href="https://github.com/ClawBio/ClawBio/issues"><img src="https://img.shields.io/github/issues/ClawBio/ClawBio" alt="Open Issues"></a>
   <a href="https://clawbio.github.io/ClawBio/slides/"><img src="https://img.shields.io/badge/slides-London_Bioinformatics_Meetup-purple" alt="Slides"></a>
 </p>
@@ -32,11 +26,9 @@
 
 ---
 
----
-
 ## What ClawBio Does Today
 
-**39 skills + 8,000 Galaxy tools. Local-first. No cloud. No guessing.**
+**40+ executable skills + 8,000 Galaxy tools. Local-first. No cloud. No guessing.**
 
 Snap a photo of a medication in Telegram. ClawBio identifies the drug from the packaging, queries your pharmacogenomic profile from [your own genome](docs/demo-genome.md), and returns a personalised dosage card — on your machine, in seconds:
 
@@ -84,34 +76,32 @@ python ancestry_pca.py --demo --output fig3
 
 ---
 
-## 🦖 What Is ClawBio?
+## What Is ClawBio?
 
-A **skill** is a domain expert's knowledge — frozen into code — that an AI agent executes correctly every time.
+Current agentic bioinformatics systems address either the **reasoning layer** (constraining LLM outputs with knowledge graphs or fine-tuning) or the **connectivity layer** (wrapping tools as MCP servers). Neither addresses the **specification layer**: the encoding of a domain expert's analytical decisions into a machine-readable contract that constrains agent behaviour. Without this layer, the agent must reconstruct expert knowledge from its training distribution, a stochastic, unversioned process.
+
+A **skill** is a self-contained directory comprising a declarative specification (`SKILL.md`), validated Python code, demo data, and a reproducibility bundle (`commands.sh`, `environment.yml`, SHA-256 checksums). The specification is a contract, not a prompt: it encodes the domain expert's analytical decisions so the LLM orchestrates but does not improvise.
 
 ```
-ChatGPT / Claude  = a smart generalist who guesses at bioinformatics
-🦖 ClawBio skill  = a domain expert's proven pipeline that the AI executes
+Ad-hoc LLM code generation  = stochastic, unversioned, unverifiable
+ClawBio skill                = specification-constrained, versioned, reproducible
 ```
 
+- **Specification-first**: Domain expertise resides in `SKILL.md`, not in model weights. Specifications are versioned, human-readable, peer-reviewable, and trivially updatable.
+- **Agent-agnostic**: Skills execute identically whether invoked by Claude, ChatGPT, or a locally hosted model via Ollama. Reproducibility is decoupled from any specific AI vendor.
 - **Local-first**: Your genomic data never leaves your laptop. No cloud uploads, no data exfiltration.
 - **Reproducible**: Every analysis exports `commands.sh`, `environment.yml`, and SHA-256 checksums. Anyone can reproduce it without the agent.
-- **Modular**: Each skill is a self-contained directory (`SKILL.md` + Python scripts) that plugs into the orchestrator.
 - **MIT licensed**: Open-source, free, community-driven.
 
-## Why Not Just Use ChatGPT?
+## Why Not Just Use an LLM?
 
-Ask Claude to "profile my pharmacogenes from this [23andMe file](https://github.com/ClawBio/ClawBio/blob/main/docs/demo-genome.md)." It'll write plausible Python. But:
+Ask any LLM to "profile the pharmacogenes in my VCF file." It will produce plausible Python. But the code may use outdated CPIC guidelines, hallucinate star allele functional classifications, or confuse reduced-function and no-function alleles. CYP2D6\*4 is a no-function allele; misclassifying it as reduced-function determines whether a patient receives a dose adjustment or is told to avoid a drug entirely. Approximately 7% of individuals of European ancestry are CYP2D6 poor metabolisers for whom codeine provides zero analgesic effect, and roughly 0.5% carry DPYD variants where standard fluorouracil dosing can be lethal.
 
-- It **hallucinates** star allele calls and uses outdated CPIC guidelines
-- It **forgets** CYP2D6 \*4 is no-function (not reduced)
-- You spend **45 minutes debugging** its output
-- No reproducibility bundle. No audit log. No checksums.
-
-ClawBio encodes the correct bioinformatics decisions so the agent gets it right first time, every time.
+An LLM should not be improvising these from training data. ClawBio encodes the correct bioinformatics decisions in versioned, peer-reviewable specifications so the agent executes them correctly every time.
 
 ---
 
-## 🔍 Provenance & Reproducibility
+## Provenance and Reproducibility
 
 Every ClawBio analysis ships with a **reproducibility bundle** — not as an afterthought, but as part of the output:
 
@@ -129,7 +119,7 @@ report/
 
 ---
 
-## 🦖 Skills
+## Skills
 
 | Skill | Status | Description |
 |-------|--------|-------------|
@@ -166,6 +156,10 @@ report/
 | [Soul2DNA](skills/soul2dna/) | **MVP** | Compile SOUL.md character profiles into synthetic diploid genomes |
 | [GenomeMatch](skills/genome-match/) | **MVP** | Score genetic compatibility across all M x F pairings per generation |
 | [Recombinator](skills/recombinator/) | **MVP** | Produce offspring via meiotic recombination, mutation, and clinical eval |
+| [Fine-Mapping](skills/fine-mapping/) | **MVP** | SuSiE/ABF credible sets with posterior inclusion probabilities from GWAS summary stats |
+| [Clinical Variant Reporter](skills/clinical-variant-reporter/) | **MVP** | ACMG-guided clinical variant classification from VCF with GiAB validation |
+| [WES Clinical Report](skills/wes-clinical-report-es/) | **MVP** | Whole-exome sequencing clinical report generation |
+| [LLM Biobank Bench](skills/llm-biobank-bench/) | **MVP** | Benchmark LLMs on biobank knowledge retrieval and coverage scoring |
 | [VCF Annotator](skills/vcf-annotator/) | Planned | Legacy VCF annotation pipeline (see Variant Annotation for the active skill) |
 | [Lit Synthesizer](skills/lit-synthesizer/) | Planned | PubMed/bioRxiv search with LLM summarisation and citation graphs |
 | [Struct Predictor](skills/struct-predictor/) | Planned | AlphaFold/Boltz local structure prediction |
@@ -175,7 +169,7 @@ report/
 
 ---
 
-## 🧬 GENOMEBOOK
+## Genomebook
 
 **Genomebook** is a synthetic-genetics sandbox built into ClawBio. It turns fictional or historical character profiles ("souls") into diploid genomes, scores compatibility, and breeds offspring across generations, complete with Mendelian inheritance, de novo mutations, and clinical evaluation.
 
@@ -219,7 +213,7 @@ python skills/recombinator/recombinator.py --demo
 
 ---
 
-## 🦖 MVP Skills in Detail
+## Skills in Detail
 
 ### PharmGx Reporter — *Personal Scale*
 
@@ -461,7 +455,7 @@ Built on [BioBlend](https://bioblend.readthedocs.io/) (Galaxy Python SDK). Devel
 
 ---
 
-## 🦖 Architecture
+## Architecture
 
 ```
 Telegram (RoboTerri)     CLI (clawbio.py)     Python (import clawbio)
@@ -507,7 +501,7 @@ Agents can also run `python clawbio.py list` to discover available skills progra
 
 ---
 
-## Community Wanted Skills 🦖
+## Community Wanted Skills
 
 We want skills from the bioinformatics community. If you work with genomics, proteomics, metabolomics, imaging, or clinical data — **wrap your pipeline as a skill**.
 
@@ -526,38 +520,11 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for the submission process and [templates
 
 ---
 
-## In the Wild
+## Presentations and Demos
 
-ClawBio is built on [OpenClaw](https://github.com/openclaw/openclaw). On 1 March 2026, at the UK AI Agent Hack at Imperial College London, Manuel Corpas introduced ClawBio to Peter Steinberger — the creator of OpenClaw itself.
-
-<p align="center">
-  <a href="https://www.youtube.com/watch?v=eEEA71qSOmU">
-    <img src="img/clawbio-peter-steinberger-poster.jpg" alt="Manuel Corpas introduces ClawBio to Peter Steinberger at the UK AI Agent Hack" width="480">
-  </a>
-  <br><em>Manuel Corpas introduces ClawBio to Peter Steinberger · UK AI Agent Hack, Imperial College London · <a href="https://www.youtube.com/watch?v=eEEA71qSOmU">Watch on YouTube →</a></em>
-</p>
-
----
-
-## DoraHacks Demo Day — Imperial College London
-
-ClawBio was presented at **DoraHacks Demo Day** at Imperial College London on 7 March 2026. Live demo: pharmacogenomics, intelligent routing, multi-channel agents, and Drug Photo.
-
-<p align="center">
-  <a href="https://www.youtube.com/watch?v=vxUDdjXMFwk">
-    <img src="https://img.youtube.com/vi/vxUDdjXMFwk/maxresdefault.jpg" alt="ClawBio DoraHacks Demo Day at Imperial College" width="480">
-  </a>
-  <br><em>ClawBio at DoraHacks Demo Day · Imperial College London · <a href="https://www.youtube.com/watch?v=vxUDdjXMFwk">Watch on YouTube →</a></em>
-</p>
-
----
-
-## Presentation
-
-ClawBio was announced at the **London Bioinformatics Meetup** on 26 February 2026.
-
-- **Slides**: [clawbio.github.io/ClawBio/slides/](https://clawbio.github.io/ClawBio/slides/)
-- **Talk**: *10 Tips for Becoming a Top 1% AI User* — with live demos of all three MVP skills
+- **London Bioinformatics Meetup** (26 Feb 2026): project announcement. [Slides](https://clawbio.github.io/ClawBio/slides/).
+- **UK AI Agent Hack, Imperial College London** (1 Mar 2026): introduced ClawBio to Peter Steinberger, creator of OpenClaw. [Video](https://www.youtube.com/watch?v=eEEA71qSOmU).
+- **DoraHacks Demo Day, Imperial College London** (7 Mar 2026): live demo of pharmacogenomics, intelligent routing, multi-channel agents, and Drug Photo. [Video](https://www.youtube.com/watch?v=vxUDdjXMFwk).
 
 ---
 
@@ -566,23 +533,24 @@ ClawBio was announced at the **London Bioinformatics Meetup** on 26 February 202
 If you use ClawBio in your research, please cite:
 
 ```bibtex
-@software{clawbio_2026,
-  author = {Corpas, Manuel},
-  title = {ClawBio: An Open-Source Library of AI Agent Skills for Reproducible Bioinformatics},
-  year = {2026},
-  url = {https://github.com/ClawBio/ClawBio}
+@article{corpas_clawbio_2026,
+  author  = {Corpas, Manuel},
+  title   = {ClawBio: an open-source skill library for reproducible agentic bioinformatics},
+  journal = {Nature Biotechnology},
+  year    = {2026},
+  note    = {Correspondence}
 }
 ```
 
 ## Links
 
-- 🧬 **Try RoboTerri**: [t.me/RoboTerri_bot](https://t.me/RoboTerri_bot) — Query a real genome on Telegram, no install needed
-- 🦖 **Slides**: [clawbio.github.io/ClawBio/slides/](https://clawbio.github.io/ClawBio/slides/)
-- 🦖 **Tutorial**: [Install your own RoboTerri](docs/tutorial-roboterri-install.md)
-- [OpenClaw](https://github.com/openclaw/openclaw) — The agent platform
-- [ClawHub](https://clawhub.ai) — Skill registry
-- [HEIM Index](https://heim-index.org) — Health Equity Index for Minorities
+- **Try RoboTerri**: [t.me/RoboTerri_bot](https://t.me/RoboTerri_bot) -- query a real genome on Telegram, no install needed
+- **Slides**: [clawbio.github.io/ClawBio/slides/](https://clawbio.github.io/ClawBio/slides/)
+- **Tutorial**: [Install your own RoboTerri](docs/tutorial-roboterri-install.md)
+- **OpenClaw**: [github.com/openclaw/openclaw](https://github.com/openclaw/openclaw) -- the agent platform
+- **ClawHub**: [clawhub.ai](https://clawhub.ai) -- skill registry
+- **HEIM Index**: [heim-index.org](https://heim-index.org) -- Health Equity Index for Minorities
 
 ## License
 
-MIT — clone it, run it, build a skill, submit a PR. 🦖
+MIT. See [LICENSE](LICENSE).
