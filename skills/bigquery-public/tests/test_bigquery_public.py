@@ -12,6 +12,7 @@ SKILL_DIR = Path(__file__).resolve().parents[1]
 PROJECT_ROOT = SKILL_DIR.parents[1]
 sys.path.insert(0, str(SKILL_DIR))
 
+import bigquery_backends as backends  # noqa: E402
 import bigquery_public as skill  # noqa: E402
 
 
@@ -19,6 +20,11 @@ _RUNNER_SPEC = importlib.util.spec_from_file_location("clawbio_runner", PROJECT_
 assert _RUNNER_SPEC and _RUNNER_SPEC.loader
 clawbio_runner = importlib.util.module_from_spec(_RUNNER_SPEC)
 _RUNNER_SPEC.loader.exec_module(clawbio_runner)
+
+_CATALOG_SPEC = importlib.util.spec_from_file_location("generate_catalog_module", PROJECT_ROOT / "scripts" / "generate_catalog.py")
+assert _CATALOG_SPEC and _CATALOG_SPEC.loader
+generate_catalog = importlib.util.module_from_spec(_CATALOG_SPEC)
+_CATALOG_SPEC.loader.exec_module(generate_catalog)
 
 
 def test_validate_read_only_sql_accepts_select_and_with():
@@ -64,6 +70,21 @@ def test_parse_scalar_param_invalid_format_and_type():
         skill.parse_scalar_param("broken")
     with pytest.raises(ValueError, match="Unsupported parameter type"):
         skill.parse_scalar_param("gene=ARRAY:TP53")
+
+
+def test_generate_catalog_parser_folds_block_scalar_description():
+    payload = """---
+name: demo
+description: >-
+  First line
+  second line
+tags: [one, two]
+---
+body
+"""
+    parsed = generate_catalog.parse_yaml_frontmatter(payload)
+    assert parsed["description"] == "First line second line"
+    assert parsed["tags"] == ["one", "two"]
 
 
 def test_ensure_output_dir_ready_rejects_non_empty_dir(tmp_path: Path):
@@ -210,6 +231,75 @@ def test_execute_query_reports_setup_message_when_all_backends_fail(monkeypatch:
             parameters=[],
             dry_run=False,
         )
+
+
+def test_bq_cli_query_prefers_stdin_transport(monkeypatch: pytest.MonkeyPatch):
+    calls: list[dict[str, object]] = []
+
+    class Proc:
+        def __init__(self, returncode: int, stdout: str, stderr: str = ""):
+            self.returncode = returncode
+            self.stdout = stdout
+            self.stderr = stderr
+
+    def fake_run(cmd, capture_output, text, check, input=None):
+        calls.append({"cmd": cmd, "input": input})
+        return Proc(0, '[{"example": 1}]')
+
+    monkeypatch.setattr(backends.shutil, "which", lambda name: "/usr/bin/bq")
+    monkeypatch.setattr(backends, "get_gcloud_project", lambda: "demo-project")
+    monkeypatch.setattr(backends.subprocess, "run", fake_run)
+
+    result = backends._execute_with_bq_cli_once(
+        query="SELECT 1 AS example",
+        location="US",
+        max_rows=5,
+        max_bytes_billed=1000,
+        parameters=[],
+        dry_run=False,
+        project_id=None,
+    )
+    assert len(calls) == 1
+    assert calls[0]["input"] == "SELECT 1 AS example"
+    assert result.raw_metadata["query_transport"] == "stdin"
+
+
+def test_bq_cli_query_falls_back_to_argv_when_stdin_is_unsupported(monkeypatch: pytest.MonkeyPatch):
+    calls: list[dict[str, object]] = []
+
+    class Proc:
+        def __init__(self, returncode: int, stdout: str, stderr: str = ""):
+            self.returncode = returncode
+            self.stdout = stdout
+            self.stderr = stderr
+
+    responses = [
+        Proc(2, "", "ERROR: query argument is required"),
+        Proc(0, '[{"example": 1}]'),
+    ]
+
+    def fake_run(cmd, capture_output, text, check, input=None):
+        calls.append({"cmd": cmd, "input": input})
+        return responses[len(calls) - 1]
+
+    monkeypatch.setattr(backends.shutil, "which", lambda name: "/usr/bin/bq")
+    monkeypatch.setattr(backends, "get_gcloud_project", lambda: "demo-project")
+    monkeypatch.setattr(backends.subprocess, "run", fake_run)
+
+    result = backends._execute_with_bq_cli_once(
+        query="SELECT 1 AS example",
+        location="US",
+        max_rows=5,
+        max_bytes_billed=1000,
+        parameters=[],
+        dry_run=False,
+        project_id=None,
+    )
+    assert len(calls) == 2
+    assert calls[0]["input"] == "SELECT 1 AS example"
+    assert calls[1]["input"] is None
+    assert calls[1]["cmd"][-1] == "SELECT 1 AS example"
+    assert result.raw_metadata["query_transport"] == "argv"
 
 
 def test_execute_discovery_prefers_python_backend(monkeypatch: pytest.MonkeyPatch):

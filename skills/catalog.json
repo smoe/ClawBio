@@ -7,8 +7,8 @@
     {
       "name": "bigquery-public",
       "cli_alias": "bigquery",
-      "description": ">-",
-      "version": "0.2.0",
+      "description": "Run read-only SQL against BigQuery public datasets with local result capture, cost safeguards, and reproducibility outputs.",
+      "version": "0.2.1",
       "status": "mvp",
       "has_script": true,
       "has_tests": true,
@@ -344,7 +344,7 @@
     {
       "name": "fine-mapping",
       "cli_alias": null,
-      "description": ">-",
+      "description": "Statistical fine-mapping of GWAS loci using SuSiE (Sum of Single Effects) and Approximate Bayes Factors to identify credible sets and posterior inclusion probabilities (PIPs) for causal variant discovery.",
       "version": "0.1.0",
       "status": "planned",
       "has_script": true,
@@ -526,7 +526,7 @@
     {
       "name": "labstep",
       "cli_alias": null,
-      "description": ">-",
+      "description": "Query and display Labstep electronic lab notebook data — experiments, protocols, resources, and inventory — via labstepPy.  Supports offline demo mode with synthetic biology data.",
       "version": "0.2.0",
       "status": "planned",
       "has_script": true,
@@ -674,7 +674,7 @@
     {
       "name": "profile-report",
       "cli_alias": "profile",
-      "description": ">-",
+      "description": "Unified personal genomic profile report — reads a PatientProfile JSON and synthesizes all skill results into a single \"Your Genomic Profile\" document.",
       "version": "0.1.0",
       "status": "mvp",
       "has_script": true,
@@ -718,7 +718,7 @@
     {
       "name": "protocols-io",
       "cli_alias": null,
-      "description": ">-",
+      "description": "Search, browse, and retrieve scientific protocols from protocols.io via REST API. Client token authentication for private protocols. Use when user mentions protocols.io, lab protocols, DOI lookup, protocol search, protocol steps, or scientific methods.",
       "version": "0.2.0",
       "status": "planned",
       "has_script": true,
@@ -740,7 +740,7 @@
     {
       "name": "pubmed-summariser",
       "cli_alias": null,
-      "description": ">-",
+      "description": "Search PubMed for a gene name or disease term and generate a structured research briefing of the top recent English-language papers.",
       "version": "0.1.0",
       "status": "planned",
       "has_script": true,

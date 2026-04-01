@@ -3,7 +3,7 @@ name: bigquery-public
 description: >-
   Run read-only SQL against BigQuery public datasets with local result capture,
   cost safeguards, and reproducibility outputs.
-version: 0.2.0
+version: 0.2.1
 author: ClawBio
 license: MIT
 tags: [bigquery, public-datasets, sql, cloud, genomics]
@@ -20,10 +20,10 @@ metadata:
     os: [darwin, linux]
     install:
       - kind: pip
-        package: google-cloud-bigquery
+        package: google-cloud-bigquery>=3,<4
         bins: []
       - kind: pip
-        package: google-auth
+        package: google-auth>=2,<3
         bins: []
     trigger_keywords:
       - bigquery

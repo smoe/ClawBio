@@ -39,19 +39,56 @@ def parse_yaml_frontmatter(text: str) -> dict:
     raw = match.group(1)
     result: dict = {}
     current_key = None
-    for line in raw.split("\n"):
+    lines = raw.split("\n")
+    idx = 0
+
+    def _fold_block(block_lines: list[str], style: str) -> str:
+        cleaned = [line[2:] if line.startswith("  ") else line for line in block_lines]
+        if style.startswith("|"):
+            return "\n".join(cleaned).strip()
+        paragraphs: list[str] = []
+        current: list[str] = []
+        for line in cleaned:
+            stripped = line.strip()
+            if not stripped:
+                if current:
+                    paragraphs.append(" ".join(current))
+                    current = []
+                continue
+            current.append(stripped)
+        if current:
+            paragraphs.append(" ".join(current))
+        return "\n\n".join(paragraphs).strip()
+
+    while idx < len(lines):
+        line = lines[idx]
         # Top-level key: value
         m = re.match(r"^(\w[\w-]*):\s*(.*)", line)
         if m:
             key, val = m.group(1), m.group(2).strip()
             if val.startswith("[") and val.endswith("]"):
                 result[key] = [v.strip().strip("'\"") for v in val[1:-1].split(",") if v.strip()]
-            elif val == "" or val == "|":
+                current_key = None
+            elif val in {"|", "|-", ">", ">-"}:
+                idx += 1
+                block_lines: list[str] = []
+                while idx < len(lines):
+                    next_line = lines[idx]
+                    if next_line.startswith("  ") or next_line == "":
+                        block_lines.append(next_line)
+                        idx += 1
+                        continue
+                    break
+                result[key] = _fold_block(block_lines, val)
+                current_key = None
+                continue
+            elif val == "":
                 result[key] = ""
                 current_key = key
             else:
                 result[key] = val.strip("'\"")
                 current_key = key
+            idx += 1
             continue
         # List item under current key
         m2 = re.match(r"^\s+-\s+(.*)", line)
@@ -59,6 +96,7 @@ def parse_yaml_frontmatter(text: str) -> dict:
             if not isinstance(result.get(current_key), list):
                 result[current_key] = []
             result[current_key].append(m2.group(1).strip().strip("'\""))
+        idx += 1
     return result
 
 
