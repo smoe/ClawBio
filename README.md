@@ -15,7 +15,7 @@
   <a href="https://github.com/ClawBio/ClawBio/actions/workflows/ci.yml"><img src="https://github.com/ClawBio/ClawBio/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="#quick-start"><img src="https://img.shields.io/badge/python-3.10+-blue?logo=python&logoColor=white" alt="Python 3.10+"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="MIT License"></a>
-  <a href="https://clawhub.ai"><img src="https://img.shields.io/badge/ClawHub-40+_skills-orange" alt="ClawHub Skills"></a>
+  <a href="https://clawhub.ai"><img src="https://img.shields.io/badge/ClawHub-41_skills-orange" alt="ClawHub Skills"></a>
   <a href="https://github.com/ClawBio/ClawBio/issues"><img src="https://img.shields.io/github/issues/ClawBio/ClawBio" alt="Open Issues"></a>
   <a href="https://clawbio.github.io/ClawBio/slides/"><img src="https://img.shields.io/badge/slides-London_Bioinformatics_Meetup-purple" alt="Slides"></a>
 </p>
@@ -40,7 +40,7 @@
 
 ## What ClawBio Does Today
 
-**40+ executable skills + 8,000 Galaxy tools. Local-first. No cloud. No guessing.**
+**41 executable skills + 8,000 Galaxy tools. Local-first. No cloud. No guessing.**
 
 Snap a photo of a medication in Telegram. ClawBio identifies the drug from the packaging, queries your pharmacogenomic profile from [your own genome](docs/demo-genome.md), and returns a personalised dosage card — on your machine, in seconds:
 

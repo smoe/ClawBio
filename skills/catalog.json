@@ -1,7 +1,7 @@
 {
   "version": "1.0.0",
   "generated_by": "scripts/generate_catalog.py",
-  "skill_count": 42,
+  "skill_count": 41,
   "galaxy_tool_count": 8182,
   "skills": [
     {
@@ -158,7 +158,7 @@
       "has_script": true,
       "has_tests": true,
       "has_demo": true,
-      "demo_command": "python skills/clinical-trial-finder/euctr.py --demo",
+      "demo_command": "python skills/clinical-trial-finder/opentargets.py --demo",
       "dependencies": [],
       "tags": [
         "clinical-trials",
@@ -179,7 +179,7 @@
       "has_script": true,
       "has_tests": true,
       "has_demo": true,
-      "demo_command": "python skills/clinical-variant-reporter/acmg_engine.py --demo",
+      "demo_command": "python skills/clinical-variant-reporter/clinical_variant_reporter.py --demo",
       "dependencies": [],
       "tags": [
         "acmg",
@@ -483,7 +483,7 @@
       "has_script": true,
       "has_tests": true,
       "has_demo": true,
-      "demo_command": "python skills/illumina-bridge/illumina_bridge.py --demo",
+      "demo_command": "python skills/illumina-bridge/illumina_providers.py --demo",
       "dependencies": [],
       "tags": [
         "illumina",
@@ -533,39 +533,6 @@
       "tags": [],
       "trigger_keywords": [],
       "chaining_partners": []
-    },
-    {
-      "name": "llm-biobank-bench",
-      "cli_alias": "llm-bench",
-      "description": ">-",
-      "version": "0.1.0",
-      "status": "mvp",
-      "has_script": true,
-      "has_tests": false,
-      "has_demo": true,
-      "demo_command": "python clawbio.py run llm-bench --demo",
-      "dependencies": [],
-      "tags": [
-        "llm",
-        "benchmark",
-        "biobank",
-        "uk-biobank",
-        "evaluation",
-        "semantic-similarity"
-      ],
-      "trigger_keywords": [
-        "llm benchmark",
-        "benchmark language models",
-        "biobank knowledge retrieval",
-        "coverage score",
-        "weighted coverage",
-        "model comparison biobank"
-      ],
-      "chaining_partners": [
-        "ukb-navigator",
-        "pubmed-summariser",
-        "lit-synthesizer"
-      ]
     },
     {
       "name": "methylation-clock",
@@ -752,7 +719,7 @@
       "has_script": true,
       "has_tests": true,
       "has_demo": true,
-      "demo_command": "python skills/pubmed-summariser/pubmed_api.py --demo",
+      "demo_command": "python skills/pubmed-summariser/pubmed_summariser.py --demo",
       "dependencies": [],
       "tags": [],
       "trigger_keywords": [],
