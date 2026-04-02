@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Agentic Variant Interpretation | ClawBio Workshop Slides</title>
+  <title>Agentic Genomics Workshop | ClawBio</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     :root {
@@ -13,20 +13,14 @@
     }
     html, body { height: 100%; overflow: hidden; }
     body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; }
-
-    /* Slide container */
     .deck { position: relative; width: 100%; height: 100%; }
     .slide {
       position: absolute; inset: 0;
       display: flex; flex-direction: column; justify-content: center; align-items: center;
-      padding: 4rem 6rem;
-      opacity: 0; pointer-events: none;
-      transition: opacity 0.4s ease;
+      padding: 4rem 6rem; opacity: 0; pointer-events: none; transition: opacity 0.4s ease;
     }
     .slide.active { opacity: 1; pointer-events: auto; }
     .slide-inner { max-width: 960px; width: 100%; }
-
-    /* Typography */
     h1 { font-size: clamp(2rem, 5vw, 3.2rem); font-weight: 800; line-height: 1.15; margin-bottom: 1rem; letter-spacing: -0.02em; }
     h1 em { font-style: normal; color: var(--accent); }
     h2 { font-size: clamp(1.4rem, 3vw, 2rem); font-weight: 700; margin-bottom: 1rem; color: var(--accent); }
@@ -39,95 +33,53 @@
     .yellow { color: var(--warn); }
     .red { color: var(--danger); }
     strong { color: var(--text); }
-
-    /* Lists */
     ul, ol { padding-left: 1.5rem; margin-bottom: 1rem; }
     li { font-size: 1.1rem; line-height: 1.7; color: var(--muted); margin-bottom: 0.5rem; }
     li strong { color: var(--text); }
-
-    /* Stats grid */
     .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1.2rem; margin: 1.5rem 0; }
     .stat { text-align: center; padding: 1.5rem; background: var(--bg2); border: 1px solid var(--border); border-radius: 12px; }
     .stat .num { font-size: 2.5rem; font-weight: 800; color: var(--accent); display: block; }
     .stat .label { font-size: 0.85rem; color: var(--muted); margin-top: 0.3rem; }
-
-    /* Cards */
     .card-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 1rem; margin: 1rem 0; }
+    .card-grid.three { grid-template-columns: repeat(3, 1fr); }
     .card { background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; padding: 1.2rem 1.5rem; }
     .card h3 { margin-bottom: 0.4rem; }
     .card p { font-size: 0.95rem; margin-bottom: 0; }
-
-    /* Table */
     table { width: 100%; border-collapse: collapse; margin: 1rem 0; }
     th { text-align: left; padding: 0.7rem 1rem; background: var(--bg2); color: var(--text); font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 2px solid var(--border); }
     td { padding: 0.7rem 1rem; border-bottom: 1px solid var(--border); color: var(--muted); font-size: 1rem; }
-
-    /* Pipeline */
     .pipeline { display: flex; align-items: center; justify-content: center; gap: 0.5rem; flex-wrap: wrap; margin: 2rem 0; }
     .pipeline-step { background: var(--bg2); border: 1px solid var(--border); border-radius: 8px; padding: 0.8rem 1.2rem; font-weight: 600; font-size: 1rem; color: var(--text); }
     .pipeline-step.active-step { border-color: var(--accent); color: var(--accent); background: rgba(63,185,80,0.08); }
     .pipeline-arrow { color: var(--muted); font-size: 1.3rem; }
-
-    /* Callout */
     .callout { border-left: 4px solid var(--accent); background: rgba(63,185,80,0.06); padding: 1.2rem 1.5rem; border-radius: 0 8px 8px 0; margin: 1.5rem 0; }
     .callout.warn { border-left-color: var(--warn); background: rgba(210,153,34,0.06); }
     .callout.danger { border-left-color: var(--danger); background: rgba(248,81,73,0.06); }
     .callout p { margin-bottom: 0; }
-
-    /* Badge */
-    .badge { display: inline-block; font-size: 0.75rem; font-weight: 700; padding: 0.2rem 0.6rem; border-radius: 999px; text-transform: uppercase; letter-spacing: 0.04em; }
-    .badge-path { background: rgba(248,81,73,0.15); color: var(--danger); }
-    .badge-drug { background: rgba(210,153,34,0.15); color: var(--warn); }
-    .badge-risk { background: rgba(88,166,255,0.15); color: var(--accent2); }
-    .badge-benign { background: rgba(63,185,80,0.12); color: var(--accent); }
-
-    /* Big number */
-    .big-number { font-size: 5rem; font-weight: 800; color: var(--accent); line-height: 1; margin-bottom: 0.5rem; }
-
-    /* Comparison columns */
+    code { background: var(--bg2); border: 1px solid var(--border); border-radius: 4px; padding: 0.15rem 0.4rem; font-family: 'SF Mono', 'Fira Code', monospace; font-size: 0.9em; color: var(--accent2); }
+    pre { background: var(--bg2); border: 1px solid var(--border); border-radius: 8px; padding: 1.2rem 1.5rem; overflow-x: auto; margin: 1rem 0; }
+    pre code { background: none; border: none; padding: 0; font-size: 0.95rem; color: var(--text); }
     .compare { display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; margin: 1rem 0; }
     .compare-col { padding: 1.5rem; border-radius: 10px; }
     .compare-col.old { background: rgba(248,81,73,0.06); border: 1px solid rgba(248,81,73,0.2); }
     .compare-col.new { background: rgba(63,185,80,0.06); border: 1px solid rgba(63,185,80,0.2); }
-
-    /* Code */
-    code { background: var(--bg2); border: 1px solid var(--border); border-radius: 4px; padding: 0.15rem 0.4rem; font-family: 'SF Mono', 'Fira Code', monospace; font-size: 0.9em; color: var(--accent2); }
-
-    /* Center slide */
     .center { text-align: center; }
     .center h1, .center h2, .center p { text-align: center; }
-
-    /* Controls */
     .controls { position: fixed; bottom: 1.5rem; right: 2rem; display: flex; gap: 0.5rem; z-index: 100; }
-    .controls button { background: var(--bg2); border: 1px solid var(--border); color: var(--text); padding: 0.5rem 1rem; border-radius: 6px; cursor: pointer; font-size: 0.9rem; transition: all 0.2s; }
-    .controls button:hover { border-color: var(--accent); color: var(--accent); }
+    .controls button { background: var(--bg2); border: 1px solid var(--border); color: var(--text); padding: 0.5rem 1rem; border-radius: 6px; cursor: pointer; font-size: 0.9rem; }
+    .controls button:hover { background: var(--bg3); }
     .controls button:disabled { opacity: 0.3; cursor: default; }
-
-    /* Progress */
-    .progress { position: fixed; top: 0; left: 0; height: 3px; background: var(--accent); transition: width 0.4s ease; z-index: 100; }
-
-    /* Slide counter */
+    .progress { position: fixed; top: 0; left: 0; height: 3px; background: var(--accent); z-index: 100; transition: width 0.3s; }
     .counter { position: fixed; bottom: 1.7rem; left: 2rem; font-size: 0.85rem; color: var(--muted); z-index: 100; }
-
-    /* Title slide special */
     .title-slide { background: radial-gradient(ellipse 80% 60% at 50% -10%, rgba(63,185,80,0.12) 0%, transparent 70%); }
     .title-badge { display: inline-flex; align-items: center; gap: 0.5rem; background: rgba(63,185,80,0.15); border: 1px solid rgba(63,185,80,0.4); color: var(--accent); font-size: 0.85rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; padding: 0.3rem 1rem; border-radius: 999px; margin-bottom: 1.5rem; }
     .title-badge img { height: 1.4rem; width: 1.4rem; border-radius: 50%; object-fit: cover; }
-
-    /* Section divider */
     .section-slide { background: radial-gradient(ellipse 60% 40% at 50% 50%, rgba(88,166,255,0.08) 0%, transparent 70%); }
-
-    /* Timeline */
-    .timeline { border-left: 2px solid var(--border); padding-left: 1.5rem; margin: 1rem 0; }
-    .timeline-item { position: relative; margin-bottom: 1rem; }
-    .timeline-item::before { content: ''; width: 10px; height: 10px; border-radius: 50%; background: var(--accent); position: absolute; left: -1.85rem; top: 0.45rem; }
-    .timeline-item .date { font-size: 0.8rem; color: var(--accent2); }
-    .timeline-item p { font-size: 0.95rem; margin-bottom: 0; }
-
+    .big-number { font-size: 5rem; font-weight: 800; color: var(--accent); line-height: 1; margin-bottom: 0.5rem; }
     @media (max-width: 768px) {
       .slide { padding: 2rem; }
       .stats { grid-template-columns: repeat(2, 1fr); }
-      .card-grid { grid-template-columns: 1fr; }
+      .card-grid, .card-grid.three { grid-template-columns: 1fr; }
       .compare { grid-template-columns: 1fr; }
     }
   </style>
@@ -139,86 +91,47 @@
 
 <div class="deck" id="deck">
 
-  <!-- SLIDE 1: Title -->
+  <!-- ============================================================ -->
+  <!-- TITLE                                                         -->
+  <!-- ============================================================ -->
+
   <div class="slide title-slide center active" data-n="1">
     <div class="slide-inner">
       <div class="title-badge"><img src="img/clawbio-logo.jpeg" alt="ClawBio logo">ClawBio Workshop</div>
-      <h1>Agentic <em>Variant Interpretation</em></h1>
-      <p class="big">Hands-on with a real human genome</p>
+      <h1>Agentic <em>Genomics</em></h1>
+      <p class="big">Leverage the power of AI in genomics</p>
       <p>Dr Manuel Corpas &middot; University of Westminster &middot; 2026</p>
     </div>
   </div>
 
-  <!-- SLIDE 2: About me -->
-  <div class="slide" data-n="2">
-    <div class="slide-inner">
-      <h2>About the instructor</h2>
-      <ul>
-        <li><strong>Senior Lecturer</strong> in Genomics, AI &amp; Health Data Science, University of Westminster</li>
-        <li><strong>Published my own genome</strong> in 2013 under a public domain licence (CC0). You will analyse it today.</li>
-        <li>Creator of <strong>ClawBio</strong>, the first bioinformatics AI agent skill library</li>
-        <li>Research focus: genomic equity, pharmacogenomics, agentic AI for science</li>
-      </ul>
-      <div class="callout">
-        <p><strong>Today's plan:</strong> ~20 min slides, then ~40 min hands-on in Google Colab. By the end, you will have annotated a real genome and found clinically relevant variants.</p>
-      </div>
-    </div>
-  </div>
+  <!-- ============================================================ -->
+  <!-- PART 1: WHAT IS CLAWBIO                                       -->
+  <!-- ============================================================ -->
 
-  <!-- SLIDE 3: Learning objectives -->
-  <div class="slide" data-n="3">
-    <div class="slide-inner">
-      <h2>Learning objectives</h2>
-      <ol>
-        <li>Explain what <strong>ClawBio</strong> is and the problem it addresses</li>
-        <li>Describe the <strong>variant annotation pipeline</strong> (VCF, VEP, ClinVar, gnomAD)</li>
-        <li>Classify variants using the <strong>ACMG five-tier system</strong></li>
-        <li>Interpret <strong>pharmacogenomic</strong> findings (drug-gene interactions)</li>
-        <li>Recognise <strong>equity gaps</strong> in genomic databases and how AI amplifies them</li>
-        <li>Run a complete analysis on a <strong>real genome in Google Colab</strong></li>
-      </ol>
-    </div>
-  </div>
-
-  <!-- SLIDE 4: Section - What is ClawBio -->
-  <div class="slide section-slide center" data-n="4">
+  <div class="slide section-slide center" data-n="2">
     <div class="slide-inner">
       <p class="big" style="color:var(--accent2);">Part 1</p>
       <h1>What is <em>ClawBio</em>?</h1>
     </div>
   </div>
 
-  <!-- SLIDE 5: ClawBio in one sentence -->
-  <div class="slide" data-n="5">
+  <div class="slide" data-n="3">
     <div class="slide-inner">
       <h2>ClawBio in one sentence</h2>
       <p class="big bright">An open-source toolkit of AI agent skills for genomic analysis.</p>
       <p>You give it genetic data. It runs the right analysis. You get a structured report.</p>
-      <div class="card-grid" style="margin-top:1.5rem;">
-        <div class="card">
-          <h3>Local-first</h3>
-          <p>Your genetic data never leaves your machine. All processing is local.</p>
-        </div>
-        <div class="card">
-          <h3>Reproducible</h3>
-          <p>Every run exports exact commands, version numbers, and checksums.</p>
-        </div>
-        <div class="card">
-          <h3>Grounded</h3>
-          <p>All gene-drug mappings trace to published CPIC guidelines and ClinVar. No hallucination.</p>
-        </div>
-        <div class="card">
-          <h3>Open source</h3>
-          <p>MIT licence. Free. Anyone can use, extend, or contribute skills.</p>
-        </div>
+      <div class="stats" style="margin-top:1.5rem;">
+        <div class="stat"><span class="num">39+</span><span class="label">bioinformatics skills</span></div>
+        <div class="stat"><span class="num">488+</span><span class="label">GitHub stars</span></div>
+        <div class="stat"><span class="num">13</span><span class="label">contributors</span></div>
+        <div class="stat"><span class="num">0</span><span class="label">cost</span></div>
       </div>
     </div>
   </div>
 
-  <!-- SLIDE 6: The problem -->
-  <div class="slide" data-n="6">
+  <div class="slide" data-n="4">
     <div class="slide-inner">
-      <h2>The problem ClawBio addresses</h2>
+      <h2>The problem ClawBio solves</h2>
       <div class="compare">
         <div class="compare-col old">
           <h3 class="red">Without ClawBio</h3>
@@ -235,217 +148,112 @@
           <h3 class="green">With ClawBio</h3>
           <ul>
             <li>One command runs the full pipeline</li>
-            <li>Batch submission with automatic rate limiting</li>
-            <li>Structured report, TSV table, and JSON output</li>
-            <li>All databases queried and merged in one pass</li>
-            <li>Every finding traces to a published source</li>
+            <li>Built-in demo data for every skill</li>
+            <li>Structured reports in markdown and JSON</li>
+            <li>Grounded in CPIC, ClinVar, gnomAD</li>
+            <li>All processing is local: your data never leaves</li>
           </ul>
-          <p><strong class="green">Minutes per genome</strong></p>
+          <p><strong class="green">Minutes per analysis</strong></p>
         </div>
       </div>
     </div>
   </div>
 
-  <!-- SLIDE 7: Community -->
-  <div class="slide" data-n="7">
+  <div class="slide" data-n="5">
     <div class="slide-inner">
-      <h2>Community and growth</h2>
-      <div class="stats">
-        <div class="stat"><span class="num">488</span><span class="label">GitHub Stars</span></div>
-        <div class="stat"><span class="num">85</span><span class="label">Forks</span></div>
-        <div class="stat"><span class="num">39</span><span class="label">Skills</span></div>
-        <div class="stat"><span class="num">13</span><span class="label">Contributors</span></div>
+      <h2>How a skill works</h2>
+      <div class="pipeline">
+        <div class="pipeline-step">SKILL.md</div>
+        <div class="pipeline-arrow">&rarr;</div>
+        <div class="pipeline-step active-step">Python script</div>
+        <div class="pipeline-arrow">&rarr;</div>
+        <div class="pipeline-step">Demo data</div>
+        <div class="pipeline-arrow">&rarr;</div>
+        <div class="pipeline-step active-step">Report</div>
       </div>
-      <div class="timeline">
-        <div class="timeline-item"><span class="date">Mar 2026</span><p><strong>v0.4</strong> Galaxy integration: 8,000+ bioinformatics tools</p></div>
-        <div class="timeline-item"><span class="date">Mar 2026</span><p><strong>v0.3</strong> Imperial College AI Agent Hackathon, security audit</p></div>
-        <div class="timeline-item"><span class="date">Feb 2026</span><p><strong>v0.2</strong> 57 automated tests, GitHub Actions CI</p></div>
-        <div class="timeline-item"><span class="date">Jan 2026</span><p><strong>v0.1</strong> First public release: 15 core skills</p></div>
+      <div class="card-grid" style="margin-top:1.5rem;">
+        <div class="card">
+          <h3>SKILL.md</h3>
+          <p>The contract. Defines inputs, outputs, domain decisions, safety rules. The AI reads this; it never overrides it.</p>
+        </div>
+        <div class="card">
+          <h3>Python script</h3>
+          <p>The implementation. Runs the pipeline, writes structured output. All processing is local.</p>
+        </div>
+        <div class="card">
+          <h3>Demo data</h3>
+          <p>Synthetic test data with every skill. Run a demo instantly without real patient data.</p>
+        </div>
+        <div class="card">
+          <h3>Report</h3>
+          <p>Markdown + JSON. Human-readable and machine-parseable. Includes disclaimers and provenance.</p>
+        </div>
       </div>
     </div>
   </div>
 
-  <!-- SLIDE 8: Skills overview -->
-  <div class="slide" data-n="8">
-    <div class="slide-inner">
-      <h2>39 skills and counting</h2>
-      <p>Each skill is a self-contained analysis module. Some examples:</p>
-      <div class="card-grid">
-        <div class="card"><h3>Variant Annotation</h3><p>VEP + ClinVar + gnomAD in one step. Tier 1-4 prioritisation.</p></div>
-        <div class="card"><h3>PharmGx Reporter</h3><p>12 genes, 51 drugs, CPIC-grounded. Works from 23andMe data.</p></div>
-        <div class="card"><h3>Equity Scorer</h3><p>HEIM diversity metrics. Flags when data is biased by ancestry.</p></div>
-        <div class="card"><h3>GWAS Lookup</h3><p>Federated query across 9 genomic databases for any rsID.</p></div>
-        <div class="card"><h3>scRNA Orchestrator</h3><p>Full single-cell RNA-seq: QC, clustering, markers, annotation.</p></div>
-        <div class="card"><h3>Galaxy Bridge</h3><p>Access 8,000+ Galaxy bioinformatics tools from ClawBio.</p></div>
-      </div>
-    </div>
-  </div>
+  <!-- ============================================================ -->
+  <!-- PART 2: VARIANT INTERPRETATION                                -->
+  <!-- ============================================================ -->
 
-  <!-- SLIDE 9: Section - Variant Interpretation -->
-  <div class="slide section-slide center" data-n="9">
+  <div class="slide section-slide center" data-n="6">
     <div class="slide-inner">
       <p class="big" style="color:var(--accent2);">Part 2</p>
       <h1>Variant <em>Interpretation</em></h1>
-      <p class="big">The biology before the AI</p>
+      <p class="big">From a single genome to clinical findings</p>
     </div>
   </div>
 
-  <!-- SLIDE 10: Genomic variation -->
-  <div class="slide" data-n="10">
-    <div class="slide-inner">
-      <h2>Genomic variation</h2>
-      <div style="display:flex; gap:3rem; align-items:center;">
-        <div>
-          <div class="big-number">4-5M</div>
-          <p class="bright" style="font-size:1.2rem;">SNPs per person</p>
-        </div>
-        <div style="flex:1;">
-          <ul>
-            <li><strong>SNP</strong>: Single Nucleotide Polymorphism. One DNA letter changed (e.g., A &rarr; G)</li>
-            <li><strong>Indel</strong>: Insertion or deletion of a few bases</li>
-            <li><strong>CNV</strong>: Copy Number Variant. Large segments duplicated or deleted</li>
-          </ul>
-          <p>Most variants are <strong class="green">benign</strong>. A small fraction affect protein function, drug metabolism, or disease risk. The challenge: finding the ones that matter.</p>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- SLIDE 11: ACMG classification -->
-  <div class="slide" data-n="11">
-    <div class="slide-inner">
-      <h2>ACMG five-tier classification</h2>
-      <table>
-        <thead><tr><th>Category</th><th>Meaning</th><th>Clinical action</th></tr></thead>
-        <tbody>
-          <tr><td><span class="badge badge-path">Pathogenic</span></td><td>Causes or contributes to disease</td><td>Report. Genetic counselling.</td></tr>
-          <tr><td><span class="badge badge-path">Likely pathogenic</span></td><td>Strong evidence, not conclusive</td><td>Report with caveat.</td></tr>
-          <tr><td><span class="badge badge-risk">VUS</span></td><td>Uncertain significance</td><td>Do not act on. May be reclassified.</td></tr>
-          <tr><td><span class="badge badge-benign">Likely benign</span></td><td>Probably no clinical effect</td><td>Generally not reported.</td></tr>
-          <tr><td><span class="badge badge-benign">Benign</span></td><td>No disease association</td><td>Not reported.</td></tr>
-        </tbody>
-      </table>
-      <div class="callout warn">
-        <p><strong>Over half of all known variants are VUS.</strong> "We don't know yet" is often the most honest answer in genomics.</p>
-      </div>
-    </div>
-  </div>
-
-  <!-- SLIDE 12: Annotation pipeline -->
-  <div class="slide center" data-n="12">
+  <div class="slide" data-n="7">
     <div class="slide-inner">
       <h2>The annotation pipeline</h2>
       <div class="pipeline">
-        <div class="pipeline-step">VCF</div>
+        <div class="pipeline-step active-step">Your variants (VCF)</div>
         <div class="pipeline-arrow">&rarr;</div>
-        <div class="pipeline-step active-step">VEP</div>
+        <div class="pipeline-step active-step">Ensembl VEP</div>
         <div class="pipeline-arrow">&rarr;</div>
         <div class="pipeline-step active-step">ClinVar</div>
         <div class="pipeline-arrow">&rarr;</div>
         <div class="pipeline-step active-step">gnomAD</div>
         <div class="pipeline-arrow">&rarr;</div>
-        <div class="pipeline-step">ACMG</div>
-        <div class="pipeline-arrow">&rarr;</div>
-        <div class="pipeline-step" style="border-color:var(--accent);color:var(--accent);">Report</div>
+        <div class="pipeline-step active-step">Report</div>
       </div>
-      <div class="card-grid" style="margin-top:1.5rem;">
-        <div class="card"><h3>VCF</h3><p>Variant Call Format. The standard file for storing genomic variants.</p></div>
-        <div class="card"><h3>VEP</h3><p>Ensembl Variant Effect Predictor. Determines functional consequence (missense, frameshift, etc.).</p></div>
-        <div class="card"><h3>ClinVar</h3><p>NCBI database of variant-disease associations. Is this variant known to be harmful?</p></div>
-        <div class="card"><h3>gnomAD</h3><p>Population allele frequencies across 76,000+ genomes. How common is this variant?</p></div>
-      </div>
-    </div>
-  </div>
-
-  <!-- SLIDE 13: Key databases -->
-  <div class="slide" data-n="13">
-    <div class="slide-inner">
-      <h2>Key databases (all free, all public)</h2>
-      <table>
-        <thead><tr><th>Database</th><th>What it tells you</th><th>Size</th></tr></thead>
+      <table style="margin-top:1.5rem;">
+        <thead><tr><th>Database</th><th>What it tells you</th></tr></thead>
         <tbody>
-          <tr><td><strong>ClinVar</strong></td><td>Clinical significance of variants</td><td>2.4M+ submissions</td></tr>
-          <tr><td><strong>gnomAD</strong></td><td>Population allele frequencies</td><td>76,000+ genomes</td></tr>
-          <tr><td><strong>OMIM</strong></td><td>Mendelian disease gene catalogue</td><td>16,000+ entries</td></tr>
-          <tr><td><strong>CPIC</strong></td><td>Gene-drug interaction guidelines</td><td>24 gene-drug pairs</td></tr>
-          <tr><td><strong>dbSNP</strong></td><td>Catalogue of all known variants</td><td>1B+ variants</td></tr>
-        </tbody>
-      </table>
-      <p>ClawBio queries ClinVar, gnomAD, and CPIC automatically during annotation. You do not need accounts or API keys.</p>
-    </div>
-  </div>
-
-  <!-- SLIDE 14: Pharmacogenomics -->
-  <div class="slide" data-n="14">
-    <div class="slide-inner">
-      <h2>Pharmacogenomics</h2>
-      <p>Your genes determine how you metabolise drugs. The wrong dose can be ineffective or dangerous.</p>
-      <table>
-        <thead><tr><th>Gene</th><th>Drugs (examples)</th><th>If you are a poor metaboliser</th></tr></thead>
-        <tbody>
-          <tr><td><strong>CYP2D6</strong></td><td>Codeine, tamoxifen, SSRIs</td><td>Zero pain relief from codeine</td></tr>
-          <tr><td><strong>CYP2C19</strong></td><td>Clopidogrel (Plavix), PPIs</td><td>Clopidogrel does not prevent stroke</td></tr>
-          <tr><td><strong>CYP2C9 + VKORC1</strong></td><td>Warfarin</td><td>Dangerous bleeding at standard dose</td></tr>
-          <tr><td><strong>TPMT</strong></td><td>Azathioprine</td><td>Life-threatening bone marrow toxicity</td></tr>
-          <tr><td><strong>DPYD</strong></td><td>5-fluorouracil</td><td>Can be fatal at standard chemo dose</td></tr>
+          <tr><td><strong>Ensembl VEP</strong></td><td>What gene is affected? Missense, synonymous, frameshift?</td></tr>
+          <tr><td><strong>ClinVar</strong></td><td>Has this variant been seen in patients? Pathogenic or benign?</td></tr>
+          <tr><td><strong>gnomAD</strong></td><td>How common is it across 76,000+ genomes?</td></tr>
+          <tr><td><strong>CPIC</strong></td><td>Does it affect drug metabolism? Which drugs?</td></tr>
         </tbody>
       </table>
     </div>
   </div>
 
-  <!-- SLIDE 15: Warfarin deep dive -->
-  <div class="slide" data-n="15">
+  <div class="slide" data-n="8">
     <div class="slide-inner">
-      <h2>The warfarin example</h2>
-      <p>Warfarin is a blood thinner with a <strong>very narrow safe zone</strong>. Two genes determine the right dose:</p>
-      <div class="compare">
-        <div class="compare-col old" style="border-color:rgba(210,153,34,0.3);background:rgba(210,153,34,0.04);">
-          <h3 class="yellow">CYP2C9</h3>
-          <p class="bright">Breaks down warfarin.</p>
-          <p>Variants *2 and *3 slow metabolism. Drug stays active longer. <strong>Lower dose needed.</strong></p>
-        </div>
-        <div class="compare-col new" style="border-color:rgba(88,166,255,0.3);background:rgba(88,166,255,0.04);">
-          <h3 class="blue">VKORC1</h3>
-          <p class="bright">The drug's target.</p>
-          <p>TT genotype = higher sensitivity. Less drug needed for the same effect. <strong>Lower dose needed.</strong></p>
-        </div>
-      </div>
-      <div class="callout danger">
-        <p><strong>The Corpasome carries both.</strong> Standard warfarin dose would risk serious haemorrhage. This is the textbook example of pharmacogenomics saving lives.</p>
-      </div>
-    </div>
-  </div>
-
-  <!-- SLIDE 16: Section - Equity -->
-  <div class="slide section-slide center" data-n="16">
-    <div class="slide-inner">
-      <p class="big" style="color:var(--accent2);">Part 3</p>
-      <h1>Equity in <em>Genomics</em></h1>
-    </div>
-  </div>
-
-  <!-- SLIDE 17: Equity stats -->
-  <div class="slide" data-n="17">
-    <div class="slide-inner">
-      <h2>The bias in genomic data</h2>
-      <div class="stats" style="grid-template-columns: repeat(3,1fr);">
-        <div class="stat"><span class="num">86%</span><span class="label">of GWAS participants are European</span></div>
-        <div class="stat"><span class="num">30x</span><span class="label">more BRCA data for Europeans</span></div>
-        <div class="stat"><span class="num">80%</span><span class="label">PRS accuracy loss in non-Europeans</span></div>
-      </div>
-      <p style="margin-top:1.5rem;">A variant that looks "benign" in current databases may be <strong>pathogenic in an unstudied population</strong>. AI trained on biased data amplifies the problem.</p>
+      <h2>ACMG classification</h2>
+      <p>The American College of Medical Genetics uses five categories:</p>
+      <table>
+        <thead><tr><th>Category</th><th>What it means</th><th>Clinical action</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Pathogenic</strong></td><td>Causes or strongly contributes to disease</td><td>Report. Genetic counselling.</td></tr>
+          <tr><td><strong>Likely pathogenic</strong></td><td>Strong evidence, not conclusive</td><td>Report with caveat.</td></tr>
+          <tr><td><strong>VUS</strong></td><td>Not enough evidence</td><td>Not acted upon. May be reclassified.</td></tr>
+          <tr><td><strong>Likely benign</strong></td><td>Probably harmless</td><td>Usually not reported.</td></tr>
+          <tr><td><strong>Benign</strong></td><td>Definitively harmless</td><td>Not reported.</td></tr>
+        </tbody>
+      </table>
       <div class="callout warn">
-        <p><strong>VUS in one population may be pathogenic in another.</strong> Every analysis should consider which populations the reference databases represent.</p>
+        <p><strong>More than half of all known variants are VUS.</strong> "We don't know yet" is often the most honest answer.</p>
       </div>
     </div>
   </div>
 
-  <!-- SLIDE 18: The Corpasome -->
-  <div class="slide" data-n="18">
+  <div class="slide" data-n="9">
     <div class="slide-inner">
       <h2>The Corpasome: a real open genome</h2>
-      <p>In 2013, Manuel Corpas published his 23andMe genotype (~600,000 SNPs) under <strong>CC0 public domain</strong>. One of the first fully open personal genomes.</p>
-      <p style="margin-top:0.5rem;"><strong>Real findings you will discover today:</strong></p>
+      <p>In 2013, Manuel Corpas published his genome under <strong>CC0 public domain</strong>. Real findings you will discover:</p>
       <table>
         <thead><tr><th>Variant</th><th>Gene</th><th>Clinical meaning</th></tr></thead>
         <tbody>
@@ -459,43 +267,283 @@
     </div>
   </div>
 
-  <!-- SLIDE 19: Section - Practical -->
-  <div class="slide section-slide center" data-n="19">
+  <div class="slide" data-n="10">
     <div class="slide-inner">
-      <p class="big" style="color:var(--accent2);">Part 4</p>
-      <h1>Hands-on <em>Practical</em></h1>
-      <p class="big">Open Google Colab now</p>
-      <p style="margin-top:1rem;"><a href="https://colab.research.google.com/github/ClawBio/ClawBio/blob/main/docs/tutorial-variant-interpretation.ipynb" target="_blank" style="color:var(--accent);font-size:1.2rem;text-decoration:underline;">Launch the notebook</a></p>
+      <h2>Pharmacogenomics: drugs meet DNA</h2>
+      <table>
+        <thead><tr><th>Gene</th><th>Drugs affected</th><th>Risk</th></tr></thead>
+        <tbody>
+          <tr><td><strong>CYP2D6</strong></td><td>Codeine, tamoxifen, antidepressants</td><td>Poor metabolisers get zero pain relief from codeine</td></tr>
+          <tr><td><strong>CYP2C19</strong></td><td>Clopidogrel (blood thinner)</td><td>Drug not activated; stroke risk unchanged</td></tr>
+          <tr><td><strong>CYP2C9 + VKORC1</strong></td><td>Warfarin</td><td>Wrong dose causes bleeding or clots</td></tr>
+          <tr><td><strong>DPYD</strong></td><td>5-fluorouracil (chemo)</td><td>Standard dose can be fatal</td></tr>
+        </tbody>
+      </table>
+      <div class="callout danger">
+        <p><strong>The Corpasome needs a significantly lower warfarin dose than standard.</strong> Without genetic testing, a doctor might prescribe a dose that causes a haemorrhage.</p>
+      </div>
     </div>
   </div>
 
-  <!-- SLIDE 20: What you will do -->
-  <div class="slide" data-n="20">
+  <!-- ============================================================ -->
+  <!-- PART 3: GWAS                                                  -->
+  <!-- ============================================================ -->
+
+  <div class="slide section-slide center" data-n="11">
     <div class="slide-inner">
-      <h2>What you will do</h2>
+      <p class="big" style="color:var(--accent2);">Part 3</p>
+      <h1>Agentic <em>GWAS</em></h1>
+      <p class="big">From one genome to population-level analysis</p>
+    </div>
+  </div>
+
+  <div class="slide" data-n="12">
+    <div class="slide-inner">
+      <h2>GWAS in one slide</h2>
+      <p class="big bright">Test every variant for association with a trait across thousands of people.</p>
+      <div class="stats" style="margin-top:1.5rem;">
+        <div class="stat"><span class="num">6,000+</span><span class="label">published GWAS</span></div>
+        <div class="stat"><span class="num">500M+</span><span class="label">participants</span></div>
+        <div class="stat"><span class="num">90,000+</span><span class="label">trait associations</span></div>
+        <div class="stat"><span class="num" style="color:var(--danger);">86%</span><span class="label">European ancestry</span></div>
+      </div>
+      <p>Summary statistics are <strong>public, free</strong>, and sufficient for PRS, meta-analysis, and fine-mapping. No HPC needed.</p>
+    </div>
+  </div>
+
+  <div class="slide" data-n="13">
+    <div class="slide-inner">
+      <h2>Three GWAS skills, one pipeline</h2>
+      <div class="pipeline">
+        <div class="pipeline-step active-step">GWAS Lookup</div>
+        <div class="pipeline-arrow">&rarr;</div>
+        <div class="pipeline-step active-step">PRS Calculator</div>
+        <div class="pipeline-arrow">&rarr;</div>
+        <div class="pipeline-step active-step">Fine-Mapping</div>
+      </div>
+      <div class="card-grid three" style="margin-top:1.5rem;">
+        <div class="card">
+          <h3>GWAS Lookup</h3>
+          <p>Query 9 databases in parallel: GWAS Catalog, Open Targets, UKB, FinnGen, Biobank Japan, GTEx, eQTL Catalogue.</p>
+        </div>
+        <div class="card">
+          <h3>PRS Calculator</h3>
+          <p>Compute polygenic risk scores from 23andMe/AncestryDNA data using 3,000+ PGS Catalog scores.</p>
+        </div>
+        <div class="card">
+          <h3>Fine-Mapping</h3>
+          <p>SuSiE credible sets to identify causal variants from summary statistics. No individual data needed.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="slide" data-n="14">
+    <div class="slide-inner">
+      <h2>Cross-ancestry: the equity gap in GWAS</h2>
+      <div class="compare">
+        <div class="compare-col old">
+          <h3 class="red">The problem</h3>
+          <ul>
+            <li>86% of GWAS participants are European</li>
+            <li>PRS lose up to 80% accuracy in non-European populations</li>
+            <li>Risk of widening health disparities</li>
+          </ul>
+        </div>
+        <div class="compare-col new">
+          <h3 class="green">What ClawBio does</h3>
+          <ul>
+            <li>Queries UKB, FinnGen, <strong>and Biobank Japan</strong> in one call</li>
+            <li>Flags allele frequency differences across populations</li>
+            <li>MVP is the most diverse GWAS cohort: 33% non-European</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- PART 4: 30x WGS                                              -->
+  <!-- ============================================================ -->
+
+  <div class="slide section-slide center" data-n="15">
+    <div class="slide-inner">
+      <p class="big" style="color:var(--accent2);">Part 4</p>
+      <h1>30x <em>Whole-Genome</em> Sequencing</h1>
+      <p class="big">The same genome at full resolution</p>
+    </div>
+  </div>
+
+  <div class="slide" data-n="16">
+    <div class="slide-inner">
+      <h2>SNP array vs whole-genome sequencing</h2>
       <table>
-        <thead><tr><th>Step</th><th>Task</th><th>Time</th></tr></thead>
+        <thead><tr><th></th><th>SNP Array (~600K)</th><th>30x WGS</th></tr></thead>
         <tbody>
-          <tr><td><strong>0</strong></td><td>Setup: click play on first two cells (ClawBio installs itself)</td><td>2 min</td></tr>
-          <tr><td><strong>1</strong></td><td>Explore the Corpasome: 600,000 SNPs, per-chromosome breakdown</td><td>5 min</td></tr>
-          <tr><td><strong>2</strong></td><td>Extract 21 clinically relevant variants and convert to VCF</td><td>3 min</td></tr>
-          <tr><td><strong>3</strong></td><td>Run variant annotation (VEP + ClinVar + gnomAD)</td><td>5 min</td></tr>
-          <tr><td><strong>4</strong></td><td>Pharmacogenomic interpretation (CPIC drug recommendations)</td><td>5 min</td></tr>
-          <tr><td><strong>5</strong></td><td>Exercises: synthetic panel (5a), own genome (5b), gene deep-dive (5c)</td><td>15 min</td></tr>
+          <tr><td><strong>SNPs</strong></td><td>~600,000</td><td>3,716,648</td></tr>
+          <tr><td><strong>Indels</strong></td><td>0</td><td>912,009</td></tr>
+          <tr><td><strong>Structural variants</strong></td><td>0</td><td>8,925</td></tr>
+          <tr><td><strong>Copy number variants</strong></td><td>0</td><td>1,387</td></tr>
+          <tr><td><strong>Coverage</strong></td><td>Pre-selected positions</td><td>Every base</td></tr>
+        </tbody>
+      </table>
+      <p>SNP arrays answer pre-defined questions. WGS lets you ask questions you did not know to ask.</p>
+    </div>
+  </div>
+
+  <div class="slide" data-n="17">
+    <div class="slide-inner">
+      <h2>Structural variants: the hidden layer</h2>
+      <table>
+        <thead><tr><th>Type</th><th>What happens</th><th>Count</th></tr></thead>
+        <tbody>
+          <tr><td><strong>DEL</strong></td><td>DNA segment missing</td><td>5,854</td></tr>
+          <tr><td><strong>BND</strong></td><td>Translocation or complex rearrangement</td><td>1,413</td></tr>
+          <tr><td><strong>DUP</strong></td><td>Segment copied (alters gene dosage)</td><td>778</td></tr>
+          <tr><td><strong>INV</strong></td><td>Segment flipped in orientation</td><td>673</td></tr>
+          <tr><td><strong>INS</strong></td><td>New DNA inserted (mobile elements)</td><td>207</td></tr>
+        </tbody>
+      </table>
+      <p>Structural variants cause an estimated <strong>20% of rare genetic disease</strong> but are invisible to SNP arrays.</p>
+    </div>
+  </div>
+
+  <div class="slide" data-n="18">
+    <div class="slide-inner">
+      <h2>QC metrics: is this genome trustworthy?</h2>
+      <table>
+        <thead><tr><th>Metric</th><th>Expected</th><th>This genome</th><th>What it tells you</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Ti/Tv ratio</strong></td><td>~2.0</td><td>2.03</td><td>Below 2.0 suggests errors or contamination</td></tr>
+          <tr><td><strong>Het/Hom ratio</strong></td><td>1.5-1.7</td><td>1.63</td><td>Outside range may indicate contamination</td></tr>
+          <tr><td><strong>Total SNPs</strong></td><td>3.5-4.5M</td><td>3,716,648</td><td>Too few = low coverage; too many = errors</td></tr>
         </tbody>
       </table>
       <div class="callout">
-        <p><strong>Requirements:</strong> A Google account and a web browser. Nothing to install. No terminal. No API keys. No payment.</p>
+        <p><strong>Always check QC before interpreting.</strong> These three numbers tell you immediately whether the data is trustworthy.</p>
       </div>
-      <p style="margin-top:1rem; text-align:center;">
-        <a href="https://docs.clawbio.ai/tutorials/variant-interpretation-workshop/" target="_blank" style="color:var(--accent2);font-size:1.1rem;">Full workshop guide: docs.clawbio.ai/tutorials/variant-interpretation-workshop</a>
-      </p>
+    </div>
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- PART 5: EQUITY                                                -->
+  <!-- ============================================================ -->
+
+  <div class="slide section-slide center" data-n="19">
+    <div class="slide-inner">
+      <p class="big" style="color:var(--accent2);">Part 5</p>
+      <h1>Equity in <em>Genomics</em></h1>
+      <p class="big">Whose genomes are studied? Whose are left out?</p>
+    </div>
+  </div>
+
+  <div class="slide" data-n="20">
+    <div class="slide-inner">
+      <h2>The numbers</h2>
+      <ul>
+        <li><strong>86%</strong> of GWAS participants are of European ancestry</li>
+        <li>Databases have <strong>30x more</strong> BRCA variant data for Europeans than other populations</li>
+        <li>Polygenic risk scores lose up to <strong>80% accuracy</strong> in non-European populations</li>
+        <li>A variant classified as "benign" may simply be <strong>unstudied</strong> in the relevant population</li>
+      </ul>
+      <div class="callout danger">
+        <p><strong>AI amplifies this.</strong> Models trained on biased data produce biased results. Every analysis should acknowledge which populations the reference data represents.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="slide" data-n="21">
+    <div class="slide-inner">
+      <h2>Democratising genomics</h2>
+      <p class="big bright">The infrastructure barrier is gone.</p>
+      <div class="card-grid">
+        <div class="card">
+          <h3>No HPC</h3>
+          <p>Everything runs in Google Colab on a free tier.</p>
+        </div>
+        <div class="card">
+          <h3>No data agreements</h3>
+          <p>Summary statistics are publicly released. No application, no waiting.</p>
+        </div>
+        <div class="card">
+          <h3>No bioinformatics team</h3>
+          <p>ClawBio wraps the full pipeline. One command per analysis.</p>
+        </div>
+        <div class="card">
+          <h3>No cost</h3>
+          <p>Google Colab is free. ClawBio is MIT-licensed. All databases are public.</p>
+        </div>
+      </div>
+      <div class="callout">
+        <p><strong>A researcher in Lima, Kampala, or Dhaka can run the same analyses as one at the Broad Institute. Today.</strong></p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- PART 6: HANDS-ON                                              -->
+  <!-- ============================================================ -->
+
+  <div class="slide section-slide center" data-n="22">
+    <div class="slide-inner">
+      <p class="big" style="color:var(--accent2);">Part 6</p>
+      <h1>Hands-on <em>Practical</em></h1>
+      <p class="big">Open Google Colab now</p>
+    </div>
+  </div>
+
+  <div class="slide" data-n="23">
+    <div class="slide-inner">
+      <h2>Workshop schedule</h2>
+      <table>
+        <thead><tr><th>Session</th><th>What you'll do</th><th>Time</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Setup</strong></td><td>Install ClawBio in Colab (one click)</td><td>2 min</td></tr>
+          <tr><td><strong>Session 1: Variant Interpretation</strong></td><td>Annotate 21 clinical variants from a real genome. VEP, ClinVar, gnomAD, CPIC.</td><td>25 min</td></tr>
+          <tr><td><strong>Session 2: GWAS</strong></td><td>Query rs7903146 across 9 databases. Compute PRS for 6 traits. Fine-map a locus with SuSiE.</td><td>25 min</td></tr>
+          <tr><td><strong>Session 3: 30x WGS</strong></td><td>Explore structural variants, QC metrics, and WGS vs SNP chip comparison.</td><td>25 min</td></tr>
+          <tr><td><strong>Q&amp;A</strong></td><td>Discussion and questions</td><td>15 min</td></tr>
+        </tbody>
+      </table>
+      <div class="callout">
+        <p><strong>Requirements:</strong> A Google account and a web browser. Nothing to install. No API keys. No payment.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="slide" data-n="24">
+    <div class="slide-inner">
+      <h2>Take-home messages</h2>
+      <ol>
+        <li><strong>AI makes the mechanical steps faster</strong>, but domain expertise in molecular biology, genetics, and clinical context remains essential.</li>
+        <li><strong>Pharmacogenomics is saving lives today.</strong> Drug-gene interactions like warfarin/CYP2C9/VKORC1 are implemented in hospitals now.</li>
+        <li><strong>"We don't know yet" is a valid answer.</strong> Over half of all variants are VUS. Honest uncertainty is a strength, not a weakness.</li>
+        <li><strong>Cross-ancestry analysis is not optional.</strong> Always check whether findings transfer across populations.</li>
+        <li><strong>Infrastructure is no longer a barrier.</strong> Google Colab + ClawBio = publication-quality analysis, for free, anywhere.</li>
+      </ol>
+    </div>
+  </div>
+
+  <div class="slide center" data-n="25">
+    <div class="slide-inner">
+      <h2>Resources</h2>
+      <table>
+        <thead><tr><th>Resource</th><th>Link</th></tr></thead>
+        <tbody>
+          <tr><td>ClawBio GitHub</td><td><a href="https://github.com/ClawBio/ClawBio" style="color:var(--accent2)">github.com/ClawBio/ClawBio</a></td></tr>
+          <tr><td>Documentation</td><td><a href="https://docs.clawbio.ai" style="color:var(--accent2)">docs.clawbio.ai</a></td></tr>
+          <tr><td>Variant Interpretation tutorial</td><td><a href="https://docs.clawbio.ai/tutorials/variant-interpretation-workshop/" style="color:var(--accent2)">docs.clawbio.ai/tutorials/variant-interpretation-workshop</a></td></tr>
+          <tr><td>GWAS tutorial</td><td><a href="https://docs.clawbio.ai/tutorials/gwas-workshop/" style="color:var(--accent2)">docs.clawbio.ai/tutorials/gwas-workshop</a></td></tr>
+          <tr><td>30x WGS tutorial</td><td><a href="https://docs.clawbio.ai/tutorials/30x-wgs-workshop/" style="color:var(--accent2)">docs.clawbio.ai/tutorials/30x-wgs-workshop</a></td></tr>
+          <tr><td>Corpasome (Zenodo)</td><td><a href="https://doi.org/10.5281/zenodo.19297389" style="color:var(--accent2)">doi:10.5281/zenodo.19297389</a></td></tr>
+        </tbody>
+      </table>
+      <p style="margin-top:2rem;"><strong class="green" style="font-size:1.3rem;">github.com/ClawBio/ClawBio</strong></p>
     </div>
   </div>
 
 </div>
 
-<!-- Controls -->
 <div class="controls">
   <button id="prev" onclick="go(-1)">&larr; Prev</button>
   <button id="next" onclick="go(1)">Next &rarr;</button>
@@ -505,7 +553,6 @@
   const slides = document.querySelectorAll('.slide');
   const total = slides.length;
   let current = 0;
-
   function show(n) {
     slides.forEach((s, i) => s.classList.toggle('active', i === n));
     document.getElementById('progress').style.width = ((n + 1) / total * 100) + '%';
@@ -513,29 +560,17 @@
     document.getElementById('prev').disabled = n === 0;
     document.getElementById('next').disabled = n === total - 1;
   }
-
-  function go(dir) {
-    current = Math.max(0, Math.min(total - 1, current + dir));
-    show(current);
-  }
-
+  function go(dir) { current = Math.max(0, Math.min(total - 1, current + dir)); show(current); }
   document.addEventListener('keydown', e => {
     if (e.key === 'ArrowRight' || e.key === ' ') { e.preventDefault(); go(1); }
     if (e.key === 'ArrowLeft') { e.preventDefault(); go(-1); }
     if (e.key === 'Home') { e.preventDefault(); current = 0; show(0); }
     if (e.key === 'End') { e.preventDefault(); current = total - 1; show(current); }
   });
-
-  // Touch support
   let touchX = 0;
   document.addEventListener('touchstart', e => touchX = e.touches[0].clientX);
-  document.addEventListener('touchend', e => {
-    const dx = e.changedTouches[0].clientX - touchX;
-    if (Math.abs(dx) > 50) go(dx < 0 ? 1 : -1);
-  });
-
+  document.addEventListener('touchend', e => { const dx = e.changedTouches[0].clientX - touchX; if (Math.abs(dx) > 50) go(dx < 0 ? 1 : -1); });
   show(0);
 </script>
-
 </body>
 </html>
