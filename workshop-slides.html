@@ -111,7 +111,8 @@
 
     /* Title slide special */
     .title-slide { background: radial-gradient(ellipse 80% 60% at 50% -10%, rgba(63,185,80,0.12) 0%, transparent 70%); }
-    .title-badge { display: inline-block; background: rgba(63,185,80,0.15); border: 1px solid rgba(63,185,80,0.4); color: var(--accent); font-size: 0.85rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; padding: 0.3rem 1rem; border-radius: 999px; margin-bottom: 1.5rem; }
+    .title-badge { display: inline-flex; align-items: center; gap: 0.5rem; background: rgba(63,185,80,0.15); border: 1px solid rgba(63,185,80,0.4); color: var(--accent); font-size: 0.85rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; padding: 0.3rem 1rem; border-radius: 999px; margin-bottom: 1.5rem; }
+    .title-badge img { height: 1.4rem; width: 1.4rem; border-radius: 50%; object-fit: cover; }
 
     /* Section divider */
     .section-slide { background: radial-gradient(ellipse 60% 40% at 50% 50%, rgba(88,166,255,0.08) 0%, transparent 70%); }
@@ -141,7 +142,7 @@
   <!-- SLIDE 1: Title -->
   <div class="slide title-slide center active" data-n="1">
     <div class="slide-inner">
-      <div class="title-badge">Systems Biology Workshop</div>
+      <div class="title-badge"><img src="img/clawbio-logo.jpeg" alt="ClawBio logo">ClawBio Workshop</div>
       <h1>Agentic <em>Variant Interpretation</em></h1>
       <p class="big">Hands-on with a real human genome</p>
       <p>Dr Manuel Corpas &middot; University of Westminster &middot; 2026</p>
