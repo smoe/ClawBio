@@ -140,6 +140,7 @@ FOLDER_TO_ALIAS = {
     "bioconductor-bridge": "bioc",
     "rnaseq-de": "rnaseq",
     "diff-visualizer": "diffviz",
+    "gentle-cloning": "gentle-cloning",
     "llm-biobank-bench": "llm-bench",
 }
 
@@ -154,7 +155,7 @@ MVP_FOLDERS = {
     "bigquery-public",
     "profile-report", "bio-orchestrator", "claw-ancestry-pca", "claw-semantic-sim",
     "ukb-navigator", "galaxy-bridge", "rnaseq-de", "diff-visualizer",
-    "bioconductor-bridge",
+    "bioconductor-bridge", "gentle-cloning",
     "llm-biobank-bench",
 }
 
@@ -182,6 +183,7 @@ TRIGGER_KEYWORDS: dict[str, list[str]] = {
     "llm-biobank-bench": ["llm benchmark", "benchmark language models", "biobank knowledge retrieval", "coverage score", "weighted coverage", "model comparison biobank"],
     "galaxy-bridge": ["galaxy", "usegalaxy", "tool shed", "bioblend", "run on galaxy", "galaxy tool", "galaxy workflow", "NGS pipeline"],
     "bioconductor-bridge": ["bioconductor", "bioc", "biocmanager", "summarizedexperiment", "singlecellexperiment", "genomicranges", "variantannotation", "annotationhub", "experimenthub"],
+    "gentle-cloning": ["gentle", "cloning workflow", "gibson assembly", "primer design", "pcr design", "prepare genome", "blast sequence", "genome anchor", "fetch genbank", "design assay"],
 }
 
 # Known chaining partners
@@ -208,6 +210,7 @@ CHAINING: dict[str, list[str]] = {
     "llm-biobank-bench": ["ukb-navigator", "pubmed-summariser", "lit-synthesizer"],
     "galaxy-bridge": ["pharmgx-reporter", "claw-metagenomics", "equity-scorer", "vcf-annotator"],
     "bioconductor-bridge": ["rnaseq-de", "scrna-orchestrator", "diff-visualizer", "bio-orchestrator"],
+    "gentle-cloning": ["bio-orchestrator", "gwas-lookup", "protocols-io", "data-extractor"],
 }
 
 

@@ -531,6 +531,13 @@ SKILLS = {
         "no_input_required": True,
         "accepts_genotypes": False,
     },
+    "gentle-cloning": {
+        "script": SKILLS_DIR / "gentle-cloning" / "gentle_cloning.py",
+        "demo_args": ["--demo"],
+        "description": "Deterministic DNA construct design and cloning specialist powered by GENtle",
+        "allowed_extra_flags": {"--gentle-cli"},
+        "accepts_genotypes": False,
+    },
     "acmg": {
         "script": SKILLS_DIR / "clinical-variant-reporter" / "clinical_variant_reporter.py",
         "demo_args": ["--demo"],
@@ -1135,6 +1142,7 @@ def main():
     run_parser.add_argument("--search", default=None, help="Live Bioconductor package search query for bioc skill")
     run_parser.add_argument("--recommend", default=None, help="Recommendation query for bioc skill")
     run_parser.add_argument("--workflow", default=None, help="Workflow query for bioc skill")
+    run_parser.add_argument("--gentle-cli", default=None, help="Explicit command used to invoke gentle_cli for gentle-cloning")
     run_parser.add_argument("--package-details", default=None, help="Bioconductor package name for bioc skill")
     run_parser.add_argument("--docs-search", default=None, help="Documentation search query for bioc skill")
     run_parser.add_argument("--package-docs", default=None, help="Fetch package documentation for bioc skill")
@@ -1321,6 +1329,8 @@ def main():
             extra.extend(["--recommend", args.recommend])
         if getattr(args, "workflow", None):
             extra.extend(["--workflow", args.workflow])
+        if getattr(args, "gentle_cli", None):
+            extra.extend(["--gentle-cli", args.gentle_cli])
         if getattr(args, "package_details", None):
             extra.extend(["--package-details", args.package_details])
         if getattr(args, "docs_search", None):
