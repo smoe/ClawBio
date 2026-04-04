@@ -483,16 +483,6 @@ class TestReport:
         assert "3Dmol" in html or "3dmol" in html
         assert "data_TEST" in html  # CIF content inlined
 
-    def test_structure_cif_copied(self, tmp_path):
-        plddt, pae, cb, seqs = self._make_inputs()
-        cif_src = tmp_path / "fake.cif"
-        cif_src.write_text("data_TEST\n")
-        generate_report(
-            output_dir=tmp_path / "out", sequences_info=seqs, plddt=plddt,
-            pae=pae, chain_boundaries=cb, cif_path=cif_src,
-            cmd="boltz predict input.yaml", input_label="test.yaml", demo=False,
-        )
-        assert (tmp_path / "out" / "structure.cif").exists()
 
     def test_reproducibility_files(self, tmp_path):
         plddt, pae, cb, seqs = self._make_inputs()
@@ -592,12 +582,15 @@ class TestPipeline:
                 input_path=None, output_dir=tmp_path / "out", demo=True,
             )
 
-        assert (tmp_path / "out" / "report.md").exists()
-        assert (tmp_path / "out" / "result.json").exists()
-        assert (tmp_path / "out" / "structure.cif").exists()
-        assert (tmp_path / "out" / "figures" / "plddt.png").exists()
-        assert (tmp_path / "out" / "figures" / "pae.png").exists()
-        assert (tmp_path / "out" / "viewer.html").exists()
+        out = tmp_path / "out"
+        # ClawBio artifacts at root
+        assert (out / "report.md").exists()
+        assert (out / "result.json").exists()
+        assert (out / "figures" / "plddt.png").exists()
+        assert (out / "figures" / "pae.png").exists()
+        assert (out / "viewer.html").exists()
+        # Boltz native layout preserved — CIF lives in predictions/<name>/
+        assert (out / "predictions" / "Trpcage" / "Trpcage_model_0.cif").exists()
         assert result["demo"] is True
         assert result["n_residues"] == 20
 

@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import importlib.metadata
 import json
-import shutil
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -79,12 +78,10 @@ def generate_report(
     _plot_plddt(output_dir / "figures" / "plddt.png", plddt, chain_boundaries)
     _plot_pae(output_dir / "figures" / "pae.png", pae, chain_boundaries)
 
-    shutil.copy2(cif_path, output_dir / "structure.cif")
-
     from core.viewer import generate_viewer_html
     generate_viewer_html(
         output_path=output_dir / "viewer.html",
-        cif_path=output_dir / "structure.cif",
+        cif_path=cif_path,
         plddt=plddt,
         chain_boundaries=chain_boundaries,
     )

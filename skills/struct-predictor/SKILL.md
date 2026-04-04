@@ -72,16 +72,22 @@ Predict a two-chain complex:
 
 ```
 output_dir/
-  report.md              # primary markdown report
-  viewer.html            # self-contained 3Dmol.js 3D viewer (open in browser)
-  result.json            # machine-readable summary
-  structure.cif          # predicted structure (copied from boltz output)
+  boltz_results_[name]/                    # Boltz native output
+    lightning_logs/                        # training/eval logs
+    predictions/
+      [name]/
+        [name]_model_0.cif                 # predicted structure (pLDDT in B-factors)
+        confidence_[name]_model_0.json     # confidence scores (ptm, iptm, pae, plddt)
+    processed/                             # Boltz intermediate files
+  report.md                                # primary markdown report
+  viewer.html                              # self-contained 3Dmol.js 3D viewer (open in browser)
+  result.json                              # machine-readable summary
   figures/
-    plddt.png            # per-residue pLDDT confidence plot
-    pae.png              # PAE inter-residue error heatmap
+    plddt.png                              # per-residue pLDDT confidence plot
+    pae.png                                # PAE inter-residue error heatmap
   reproducibility/
-    commands.sh          # exact boltz predict command used
-    environment.txt      # boltz version snapshot
+    commands.sh                            # exact boltz predict command used
+    environment.txt                        # boltz version snapshot
 ```
 
 ## YAML Complex Format

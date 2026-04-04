@@ -68,10 +68,10 @@ def run_struct_prediction(
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    with tempfile.TemporaryDirectory(prefix="struct_predictor_") as _tmpdir:
+    # Step 1: Prepare input YAML in a temp dir (adds msa: empty for offline run)
+    with tempfile.TemporaryDirectory(prefix="struct_predictor_input_") as _tmpdir:
         work_dir = Path(_tmpdir)
 
-        # --- Step 1: Prepare input ---
         if demo:
             print(f"  Demo mode: {DEMO_NAME} (20 residues, PDB 1L2Y)")
             prepared = validate_and_prepare(_DEMO_YAML, work_dir / "boltz_input")
@@ -83,45 +83,44 @@ def run_struct_prediction(
 
         print(f"  Chains: {len(prepared['sequences'])}, type: {prepared['input_type']}")
 
-        # --- Step 2: Boltz prediction ---
-        boltz_raw_dir = work_dir / "boltz_raw"
+        # Step 2: Boltz writes directly to output_dir, preserving its native layout:
+        #   output_dir/lightning_logs/
+        #   output_dir/predictions/<name>/<name>_model_0.cif
+        #   output_dir/predictions/<name>/confidence_<name>_model_0.json
         print("  Running Boltz-2 prediction...")
         predict_result = run_boltz(
             input_path=prepared["boltz_input_path"],
-            boltz_output_dir=boltz_raw_dir,
-        )
-        cif_path = predict_result["cif_path"]
-        conf_json_path = predict_result["confidence_json_path"]
-
-        cmd = _build_cmd(
-            input_label=input_label,
-            output_dir=output_dir,
-            demo=demo,
+            boltz_output_dir=output_dir,
         )
 
-        # --- Step 3: Extract confidence ---
-        print("  Extracting pLDDT and PAE...")
-        conf = extract_confidence(cif_path, conf_json_path)
-        plddt = conf["plddt"]
-        pae   = conf["pae"]
-        chain_boundaries = conf["chain_boundaries"]
+    cif_path = predict_result["cif_path"]
+    conf_json_path = predict_result["confidence_json_path"]
 
-        print(f"  Mean pLDDT: {plddt.mean():.1f}")
-        print(f"  Residues: {len(plddt)}")
+    cmd = _build_cmd(input_label=input_label, output_dir=output_dir, demo=demo)
 
-        # --- Step 4: Generate report ---
-        print(f"  Writing report to {output_dir}/")
-        generate_report(
-            output_dir=output_dir,
-            sequences_info=prepared["sequences"],
-            plddt=plddt,
-            pae=pae,
-            chain_boundaries=chain_boundaries,
-            cif_path=cif_path,
-            cmd=cmd,
-            input_label=input_label,
-            demo=demo,
-        )
+    # Step 3: Extract confidence
+    print("  Extracting pLDDT and PAE...")
+    conf = extract_confidence(cif_path, conf_json_path)
+    plddt = conf["plddt"]
+    pae   = conf["pae"]
+    chain_boundaries = conf["chain_boundaries"]
+
+    print(f"  Mean pLDDT: {plddt.mean():.1f}")
+    print(f"  Residues: {len(plddt)}")
+
+    # Step 4: Write ClawBio artifacts alongside Boltz output at output_dir root
+    print(f"  Writing report to {output_dir}/")
+    generate_report(
+        output_dir=output_dir,
+        sequences_info=prepared["sequences"],
+        plddt=plddt,
+        pae=pae,
+        chain_boundaries=chain_boundaries,
+        cif_path=cif_path,
+        cmd=cmd,
+        input_label=input_label,
+        demo=demo,
+    )
 
     result = json.loads((output_dir / "result.json").read_text())
     print(f"\n  Report: {output_dir / 'report.md'}")
