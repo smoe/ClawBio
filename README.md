@@ -15,7 +15,7 @@
   <a href="https://github.com/ClawBio/ClawBio/actions/workflows/ci.yml"><img src="https://github.com/ClawBio/ClawBio/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="#quick-start"><img src="https://img.shields.io/badge/python-3.10+-blue?logo=python&logoColor=white" alt="Python 3.10+"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="MIT License"></a>
-  <a href="https://clawhub.ai"><img src="https://img.shields.io/badge/ClawHub-41_skills-orange" alt="ClawHub Skills"></a>
+  <a href="https://clawhub.ai"><img src="https://img.shields.io/badge/ClawHub-42_skills-orange" alt="ClawHub Skills"></a>
   <a href="https://github.com/ClawBio/ClawBio/issues"><img src="https://img.shields.io/github/issues/ClawBio/ClawBio" alt="Open Issues"></a>
   <a href="https://clawbio.github.io/ClawBio/slides/"><img src="https://img.shields.io/badge/slides-London_Bioinformatics_Meetup-purple" alt="Slides"></a>
 </p>
@@ -40,7 +40,9 @@
 
 ## What ClawBio Does Today
 
-**41 executable skills + 8,000 Galaxy tools. Local-first. No cloud. No guessing.**
+**42 executable skills + 8,000 Galaxy tools + 687 tests + benchmark validation. Local-first. No cloud. No guessing.**
+
+> **v0.5.0 released** (4 Apr 2026): Validation and Benchmark Infrastructure. AD ground truth benchmark, mock API server for offline testing, swappable fine-mapping pipeline (SuSiE vs ABF), 74 benchmark tests, red/green TDD mandate. [Release notes](https://github.com/ClawBio/ClawBio/releases/tag/v0.5.0).
 
 Snap a photo of a medication in Telegram. ClawBio identifies the drug from the packaging, queries your pharmacogenomic profile from [your own genome](docs/demo-genome.md), and returns a personalised dosage card — on your machine, in seconds:
 
@@ -62,6 +64,35 @@ Every result ships with a reproducibility bundle: `commands.sh`, `environment.ym
 ClawBio's demo data is built on a real, fully open human genome: the **Corpasome**. The [23andMe SNP chip](docs/demo-genome.md) (~600K variants) has been available since launch. Now, the project also ships subsets from a **30x Illumina whole-genome sequence** (GRCh37), covering ~4M SNPs, ~600K indels, and structural variants (DEL, DUP, INV, BND, INS, CNVs). All data comes from a single individual (Manuel Corpas), licensed CC0, and published on Zenodo ([doi:10.5281/zenodo.19297389](https://doi.org/10.5281/zenodo.19297389)). This dataset is provided for research and educational purposes only.
 
 See [docs/reference-genome.md](docs/reference-genome.md) for use cases, subsets, and citation details.
+
+---
+
+## Validation & Benchmarking
+
+ClawBio v0.5.0 introduces the platform's first systematic validation infrastructure. Skills are scored against curated ground truth with objective metrics.
+
+**What's in the benchmark suite:**
+
+| Component | Description |
+|-----------|-------------|
+| **AD Ground Truth** | 34 Alzheimer's disease genes across 3 evidence tiers (Mendelian, GWAS-replicated, novel), 20 negative controls, 10 lead variants |
+| **Mock API Server** | Deterministic endpoints for Ensembl, GWAS Catalog, ClinPGx. Offline CI without rate limits |
+| **Benchmark Scorer** | Gene recovery rate, FDR, precision, recall, F1, tier-weighted composite score |
+| **Swappable Fine-Mapping** | ABF vs SuSiE head-to-head on same data. Method registry pattern for adding FINEMAP, PolyFun |
+| **Nightly Sweep** | Runs every skill in demo mode, scores outputs against ground truth |
+
+```bash
+# Run the fine-mapping benchmark
+python tests/benchmark/finemapping_benchmark.py --output /tmp/fm_bench
+
+# Score a gene list against AD ground truth
+python tests/benchmark/benchmark_scorer.py --genes "APP,BIN1,CLU,TREM2,GAPDH"
+
+# Start mock API server for offline testing
+python tests/benchmark/mock_api_server.py &
+```
+
+**74 benchmark tests**, all green. See [CHANGELOG.md](CHANGELOG.md) for full details.
 
 ---
 
