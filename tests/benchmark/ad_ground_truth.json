@@ -1,0 +1,103 @@
+{
+  "version": "1.0.0",
+  "description": "Alzheimer's disease ground truth benchmark set for ClawBio pipeline evaluation. Positive controls are established AD causal genes/variants from ClinVar, OMIM, and Bellenguez 2022 GWAS. Negative controls are matched permuted genes with no AD association.",
+  "source_references": [
+    "Bellenguez et al. 2022 (Nature Genetics 54:412-436) — 75 AD risk loci",
+    "Wightman et al. 2021 (Nature Genetics 53:1276-1282) — 38 loci",
+    "ClinVar (accessed April 2026) — pathogenic/likely pathogenic AD variants",
+    "OMIM #104300 — Alzheimer Disease"
+  ],
+  "positive_genes": {
+    "description": "Established AD causal/risk genes with strong genetic evidence",
+    "tier1_causal": [
+      {"gene": "APP", "omim": "104760", "chr": "21", "mechanism": "Amyloid precursor protein; familial AD mutations", "evidence": "mendelian"},
+      {"gene": "PSEN1", "omim": "104311", "chr": "14", "mechanism": "Presenilin 1; gamma-secretase component", "evidence": "mendelian"},
+      {"gene": "PSEN2", "omim": "600759", "chr": "1", "mechanism": "Presenilin 2; gamma-secretase component", "evidence": "mendelian"},
+      {"gene": "APOE", "omim": "107741", "chr": "19", "mechanism": "Apolipoprotein E; e4 allele major risk factor", "evidence": "mendelian_and_gwas"}
+    ],
+    "tier2_gwas_replicated": [
+      {"gene": "BIN1", "chr": "2", "lead_snp": "rs6733839", "pvalue": 2.1e-173, "source": "Bellenguez2022"},
+      {"gene": "CLU", "chr": "8", "lead_snp": "rs11787077", "pvalue": 2.3e-36, "source": "Bellenguez2022"},
+      {"gene": "CR1", "chr": "1", "lead_snp": "rs679515", "pvalue": 3.0e-28, "source": "Bellenguez2022"},
+      {"gene": "PICALM", "chr": "11", "lead_snp": "rs3851179", "pvalue": 2.3e-33, "source": "Bellenguez2022"},
+      {"gene": "MS4A6A", "chr": "11", "lead_snp": "rs1582763", "pvalue": 3.1e-26, "source": "Bellenguez2022"},
+      {"gene": "CD33", "chr": "19", "lead_snp": "rs3865444", "pvalue": 1.2e-10, "source": "Bellenguez2022"},
+      {"gene": "ABCA7", "chr": "19", "lead_snp": "rs12151021", "pvalue": 5.3e-24, "source": "Bellenguez2022"},
+      {"gene": "CD2AP", "chr": "6", "lead_snp": "rs10948363", "pvalue": 6.4e-15, "source": "Bellenguez2022"},
+      {"gene": "EPHA1", "chr": "7", "lead_snp": "rs11771145", "pvalue": 1.1e-13, "source": "Bellenguez2022"},
+      {"gene": "SORL1", "chr": "11", "lead_snp": "rs11218343", "pvalue": 9.7e-15, "source": "Bellenguez2022"},
+      {"gene": "FERMT2", "chr": "14", "lead_snp": "rs17125944", "pvalue": 1.9e-10, "source": "Bellenguez2022"},
+      {"gene": "SLC24A4", "chr": "14", "lead_snp": "rs12590654", "pvalue": 2.6e-10, "source": "Bellenguez2022"},
+      {"gene": "CASS4", "chr": "20", "lead_snp": "rs7274581", "pvalue": 1.8e-09, "source": "Bellenguez2022"},
+      {"gene": "TREM2", "chr": "6", "lead_snp": "rs143332484", "pvalue": 1.5e-14, "source": "Bellenguez2022"},
+      {"gene": "ABI3", "chr": "17", "lead_snp": "rs616338", "pvalue": 4.5e-10, "source": "Bellenguez2022"},
+      {"gene": "PLCG2", "chr": "16", "lead_snp": "rs72824905", "pvalue": 1.3e-08, "source": "Bellenguez2022"},
+      {"gene": "ADAM10", "chr": "15", "lead_snp": "rs442495", "pvalue": 5.2e-11, "source": "Bellenguez2022"},
+      {"gene": "ADAMTS1", "chr": "21", "lead_snp": "rs2830500", "pvalue": 3.7e-09, "source": "Bellenguez2022"},
+      {"gene": "WWOX", "chr": "16", "lead_snp": "rs62039712", "pvalue": 6.9e-09, "source": "Bellenguez2022"},
+      {"gene": "SHARPIN", "chr": "8", "lead_snp": "rs34173062", "pvalue": 1.4e-08, "source": "Bellenguez2022"}
+    ],
+    "tier3_novel_bellenguez": [
+      {"gene": "NCK2", "chr": "2", "lead_snp": "rs143080277", "pvalue": 1.7e-15, "source": "Bellenguez2022"},
+      {"gene": "TSPAN14", "chr": "10", "lead_snp": "rs1870138", "pvalue": 3.3e-09, "source": "Bellenguez2022"},
+      {"gene": "SEC61G", "chr": "7", "lead_snp": "rs12671141", "pvalue": 1.7e-08, "source": "Bellenguez2022"},
+      {"gene": "CTSH", "chr": "15", "lead_snp": "rs3784539", "pvalue": 3.4e-08, "source": "Bellenguez2022"},
+      {"gene": "WDR12", "chr": "2", "lead_snp": "rs138190086", "pvalue": 7.8e-13, "source": "Bellenguez2022"},
+      {"gene": "MME", "chr": "3", "lead_snp": "rs61762319", "pvalue": 4.6e-09, "source": "Bellenguez2022"},
+      {"gene": "SIGLEC11", "chr": "19", "lead_snp": "rs3851560", "pvalue": 2.1e-08, "source": "Bellenguez2022"},
+      {"gene": "TMEM106B", "chr": "7", "lead_snp": "rs13237518", "pvalue": 8.2e-09, "source": "Bellenguez2022"},
+      {"gene": "ANK3", "chr": "10", "lead_snp": "rs7068231", "pvalue": 1.1e-08, "source": "Bellenguez2022"},
+      {"gene": "ABCA1", "chr": "9", "lead_snp": "rs2422493", "pvalue": 6.1e-09, "source": "Bellenguez2022"}
+    ]
+  },
+  "negative_genes": {
+    "description": "Matched control genes with no known AD association. Same chromosome distribution, similar gene length, expressed in brain but not implicated in neurodegeneration.",
+    "genes": [
+      {"gene": "GAPDH", "chr": "12", "reason": "Housekeeping, no AD GWAS signal"},
+      {"gene": "ACTB", "chr": "7", "reason": "Cytoskeletal, no AD GWAS signal"},
+      {"gene": "TUBB", "chr": "6", "reason": "Structural, no AD GWAS signal"},
+      {"gene": "HPRT1", "chr": "X", "reason": "Metabolic, no AD GWAS signal"},
+      {"gene": "RPL13A", "chr": "19", "reason": "Ribosomal, no AD GWAS signal"},
+      {"gene": "YWHAZ", "chr": "8", "reason": "Signalling, no AD GWAS signal"},
+      {"gene": "UBC", "chr": "12", "reason": "Ubiquitin, no AD GWAS signal"},
+      {"gene": "ALDOA", "chr": "16", "reason": "Glycolysis, no AD GWAS signal"},
+      {"gene": "ENO2", "chr": "12", "reason": "Neuronal enolase, no AD GWAS signal"},
+      {"gene": "PGK1", "chr": "X", "reason": "Glycolysis, no AD GWAS signal"},
+      {"gene": "LDHA", "chr": "11", "reason": "Lactate metabolism, no AD GWAS signal"},
+      {"gene": "TPI1", "chr": "12", "reason": "Glycolysis, no AD GWAS signal"},
+      {"gene": "MDH1", "chr": "2", "reason": "TCA cycle, no AD GWAS signal"},
+      {"gene": "CKB", "chr": "14", "reason": "Creatine kinase, no AD GWAS signal"},
+      {"gene": "NRGN", "chr": "11", "reason": "Neurogranin, brain-expressed but not AD causal"},
+      {"gene": "SYP", "chr": "X", "reason": "Synaptophysin, brain marker not AD causal"},
+      {"gene": "MAP2", "chr": "2", "reason": "Neuronal marker, no AD GWAS signal"},
+      {"gene": "SLC17A7", "chr": "19", "reason": "Glutamate transporter, no AD GWAS signal"},
+      {"gene": "GAD1", "chr": "2", "reason": "GABAergic, no AD GWAS signal"},
+      {"gene": "TH", "chr": "11", "reason": "Dopamine synthesis, no AD GWAS signal"}
+    ]
+  },
+  "lead_variants": {
+    "description": "Lead SNPs from Bellenguez 2022 for fine-mapping benchmark evaluation",
+    "variants": [
+      {"rsid": "rs6733839", "chr": "2", "pos_grch38": 127892810, "gene": "BIN1", "pvalue": 2.1e-173},
+      {"rsid": "rs679515", "chr": "1", "pos_grch38": 207577223, "gene": "CR1", "pvalue": 3.0e-28},
+      {"rsid": "rs11787077", "chr": "8", "pos_grch38": 27607002, "gene": "CLU", "pvalue": 2.3e-36},
+      {"rsid": "rs3851179", "chr": "11", "pos_grch38": 85868640, "gene": "PICALM", "pvalue": 2.3e-33},
+      {"rsid": "rs1582763", "chr": "11", "pos_grch38": 60266282, "gene": "MS4A6A", "pvalue": 3.1e-26},
+      {"rsid": "rs12151021", "chr": "19", "pos_grch38": 1063443, "gene": "ABCA7", "pvalue": 5.3e-24},
+      {"rsid": "rs143332484", "chr": "6", "pos_grch38": 41161469, "gene": "TREM2", "pvalue": 1.5e-14},
+      {"rsid": "rs10948363", "chr": "6", "pos_grch38": 47428895, "gene": "CD2AP", "pvalue": 6.4e-15},
+      {"rsid": "rs11771145", "chr": "7", "pos_grch38": 143099133, "gene": "EPHA1", "pvalue": 1.1e-13},
+      {"rsid": "rs442495", "chr": "15", "pos_grch38": 58730415, "gene": "ADAM10", "pvalue": 5.2e-11}
+    ]
+  },
+  "scoring": {
+    "description": "How to score a pipeline against this ground truth",
+    "gene_recovery_rate": "Fraction of tier1 + tier2 positive genes recovered by the pipeline",
+    "false_discovery_rate": "Fraction of pipeline results that are in the negative gene set",
+    "precision": "TP / (TP + FP) where TP = in positive set, FP = in negative set",
+    "recall": "TP / (TP + FN) where FN = positive genes not recovered",
+    "f1": "2 * precision * recall / (precision + recall)",
+    "tier_weighting": {"tier1_causal": 3.0, "tier2_gwas_replicated": 2.0, "tier3_novel_bellenguez": 1.0},
+    "minimum_acceptable": {"gene_recovery_rate": 0.5, "precision": 0.7, "f1": 0.6}
+  }
+}
