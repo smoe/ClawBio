@@ -38,10 +38,12 @@ When the user asks a question, match it to a skill and act:
 | Fine-mapping, SuSiE, SuSiE-inf, ABF, credible sets, PIP, posterior inclusion probability, causal variant, fine map locus, FINEMAP, polyfun, infinitesimal fine-mapping | `skills/fine-mapping/` | Run `fine_mapping.py` |
 | LLM benchmark, benchmark language models, biobank knowledge retrieval, coverage score, weighted coverage, model comparison biobank, semantic similarity benchmark | `skills/llm-biobank-bench/` | Read SKILL.md, apply methodology |
 | Cell segmentation, nucleus segmentation, microscopy, fluorescence microscopy, cellpose, cpsam, image segmentation, cell counting, segmentation mask | `skills/cell-detection/` | Run `cell_detection.py` |
+| WES clinical report English, exome PDF report, whole exome sequencing report, clinical exome PDF | `skills/wes-clinical-report-en/` | Run `wes_clinical_report_en.py` |
+| WES clinical report Spanish, informe clinico WES, exome PDF espanol, Predice, Inbiomedic, Novogene report | `skills/wes-clinical-report-es/` | Run `wes_clinical_report_es.py` |
 
 ## How to Use a Skill
 
-### Skills with Python scripts (pharmgx-reporter, equity-scorer, nutrigx_advisor, scrna-orchestrator, bio-orchestrator, clinpgx, gwas-prs, gwas-lookup, profile-report, ukb-navigator, galaxy-bridge, rnaseq-de, methylation-clock, protocols-io, soul2dna, genome-match, recombinator, labstep, fine-mapping, cell-detection)
+### Skills with Python scripts (pharmgx-reporter, equity-scorer, nutrigx_advisor, scrna-orchestrator, bio-orchestrator, clinpgx, gwas-prs, gwas-lookup, profile-report, ukb-navigator, galaxy-bridge, rnaseq-de, methylation-clock, protocols-io, soul2dna, genome-match, recombinator, labstep, fine-mapping, cell-detection, wes-clinical-report-en, wes-clinical-report-es)
 1. Read the skill's `SKILL.md` for domain context
 2. Run the Python script with correct CLI arguments (see below)
 3. Show the user the output — open any generated figures and explain results
@@ -189,6 +191,20 @@ python skills/labstep/labstep.py --experiment-id ID
 python skills/labstep/labstep.py --protocols [--search QUERY] [--count N]
 python skills/labstep/labstep.py --protocol-id ID
 python skills/labstep/labstep.py --inventory [--search QUERY]
+
+# WES Clinical Report (English) — professional PDF from WES markdown
+python skills/wes-clinical-report-en/wes_clinical_report_en.py \
+  --report-dir <reports_dir> --output-dir <pdf_dir>
+python skills/wes-clinical-report-en/wes_clinical_report_en.py \
+  --report-dir <reports_dir> --output-dir <pdf_dir> --samples Sample3
+python skills/wes-clinical-report-en/wes_clinical_report_en.py --demo
+
+# WES Clinical Report (Spanish) — informe clinico PDF desde WES markdown
+python skills/wes-clinical-report-es/wes_clinical_report_es.py \
+  --report-dir <reports_dir> --output-dir <pdf_dir>
+python skills/wes-clinical-report-es/wes_clinical_report_es.py \
+  --report-dir <reports_dir> --output-dir <pdf_dir> --samples Sample3
+python skills/wes-clinical-report-es/wes_clinical_report_es.py --demo
 ```
 
 ## Demo Data
@@ -221,6 +237,8 @@ For instant demos when the user has no data:
 | Labstep demo (3 experiments, protocols, inventory) | `--demo` flag | labstep |
 | Fine-mapping demo (200-variant locus, 2 causal signals, SuSiE) | `--demo` flag | fine-mapping |
 | CellposeSAM demo (synthetic 512×512 fluorescence nuclei image, ~67 cells) | `--demo` flag | cell-detection |
+| WES demo report (8 P/LP variants, 6 PGx, synthetic) | `skills/wes-clinical-report-en/examples/demo_WES_Report.md` | wes-clinical-report-en |
+| WES demo report (same, for Spanish output) | `skills/wes-clinical-report-es/examples/demo_WES_Report.md` | wes-clinical-report-es |
 | Corpas 30x chr20 SNPs + indels (WGS) | `corpas-30x/subsets/chr20_snps_indels.vcf.gz` | variant-annotation, equity-scorer |
 | Corpas 30x SV calls (WGS) | `corpas-30x/subsets/sv_calls.vcf.gz` | variant-annotation |
 | Corpas 30x CNV calls (WGS) | `corpas-30x/subsets/cnv_calls.vcf.gz` | variant-annotation |
@@ -306,6 +324,12 @@ python skills/fine-mapping/fine_mapping.py --demo --output /tmp/finemapping_demo
 
 # CellposeSAM demo
 python skills/cell-detection/cell_detection.py --demo --output /tmp/cell_detection_demo
+
+# WES Clinical Report (English) demo
+python skills/wes-clinical-report-en/wes_clinical_report_en.py --demo
+
+# WES Clinical Report (Spanish) demo
+python skills/wes-clinical-report-es/wes_clinical_report_es.py --demo
 
 ```
 
