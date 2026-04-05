@@ -118,6 +118,21 @@ If you are looking for something to build:
 - **Proteomics Analyser**: MaxQuant/DIA-NN wrapper
 - **Spatial Transcriptomics**: Visium/MERFISH analysis
 
+## External Validation
+
+ClawBio skills are independently audited by [clawbio_bench](https://github.com/biostochastics/clawbio_bench), a standalone safety, correctness, and honesty benchmark maintained by Sergey Kornilov (Biostochastics, LLC). The benchmark runs in CI on every PR and produces tamper-evident verdict artifacts.
+
+If you find a scientific error in ClawBio, you can:
+- Open an issue on this repo with the finding
+- Add a test case to clawbio_bench (the external standard)
+- Both (preferred)
+
+We commit to triaging all externally reported findings and referencing the finding ID in fix commits.
+
+## Acknowledgements
+
+- **Sergey Kornilov** ([Biostochastics](https://github.com/biostochastics)) for building the independent [clawbio_bench](https://github.com/biostochastics/clawbio_bench) audit suite and identifying critical correctness and honesty findings across multiple skills.
+
 ## Questions?
 
-Open an issue or reach out via the repo discussions. 🦖
+Open an issue or reach out via the repo discussions.
