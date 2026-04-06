@@ -24,7 +24,7 @@ def run_susie(
     max_iter: int = 100,
     tol: float = 1e-3,
     min_purity: float = 0.5,
-    null_weight: float = 0.0,
+    null_weight: float | None = None,
 ) -> dict:
     """Run SuSiE fine-mapping.
 
@@ -42,8 +42,8 @@ def run_susie(
         single-effect regression. When > 0, the model can assign posterior mass
         to "no effect at this locus", preventing phantom PIPs on null loci.
         The susieR reference implementation uses null_weight to mitigate
-        forced signal assignment. Recommended: 0 for loci with known signals,
-        a small value (e.g. 1/(L+1)) for genome-wide scans.
+        forced signal assignment. Default: 1/(L+1), giving equal prior to
+        "no effect" as to each of L possible effects. Set to 0 to disable.
 
     Returns
     -------
@@ -68,6 +68,11 @@ def run_susie(
     if np.any(np.isnan(z)):
         raise ValueError("z-score vector contains NaN values")
 
+    # Default null_weight: 1/(L+1) gives equal prior to "no effect" as to
+    # each of L possible effects. Prevents forced signal on null loci.
+    if null_weight is None:
+        null_weight = 1.0 / (L + 1)
+
     p = len(z)
     z = z.astype(float)
     R = R.astype(float)
@@ -88,8 +93,9 @@ def run_susie(
 
     # Initialise
     alpha = np.ones((L, p)) / p       # posterior weights (uniform init)
-    mu    = np.zeros((L, p))           # posterior means
-    mu2   = np.zeros((L, p))           # posterior second moments
+    mu    = np.zeros((L, p))           # alpha-weighted posterior means (for IBSS updates)
+    mu2   = np.zeros((L, p))           # alpha-weighted posterior second moments
+    cond_mu = np.zeros((L, p))        # conditional posterior means (pure, not alpha-weighted)
 
     elbo_history = []
     converged = False
@@ -134,11 +140,11 @@ def run_susie(
 
             # Posterior mean and second moment (Gaussian single-effect)
             # mu_l_j  = w / (V_j + w) * r_l_j    (scalar approximation per variant)
-            # For the mixture: mu[l] = sum_j alpha[l,j] * mu_j^posterior
-            post_mean_j = (w / (V + w)) * r_l          # posterior mean per variant
-            post_var_j  = w * V / (V + w)              # posterior variance per variant
+            post_mean_j = (w / (V + w)) * r_l          # conditional posterior mean per variant
+            post_var_j  = w * V / (V + w)              # conditional posterior variance per variant
 
-            mu[l]  = alpha[l] * post_mean_j            # weighted by alpha
+            cond_mu[l] = post_mean_j                   # pure conditional posterior mean
+            mu[l]  = alpha[l] * post_mean_j            # alpha-weighted (for IBSS fitted values)
             mu2[l] = alpha[l] * (post_mean_j**2 + post_var_j)
 
             # Keep fitted_all in sync for the next effect's residual
@@ -156,9 +162,15 @@ def run_susie(
     pip = 1.0 - np.prod(1.0 - alpha, axis=0)
     pip = np.clip(pip, 0.0, 1.0)
 
+    # Non-convergent results: suppress PIPs to prevent downstream use of
+    # unreliable estimates. Return zeros with a warning.
+    if not converged:
+        pip = np.zeros_like(pip)
+
     return {
         "alpha": alpha,
-        "mu": mu,
+        "mu": cond_mu,          # conditional posterior mean (pure, per Wang et al. eq. 4)
+        "mu_weighted": mu,      # alpha-weighted posterior mean (used in IBSS fitted values)
         "mu2": mu2,
         "pip": pip,
         "null_weight_used": null_weight,

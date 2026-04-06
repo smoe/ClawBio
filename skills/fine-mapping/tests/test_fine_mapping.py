@@ -172,13 +172,19 @@ class TestSuSiE:
         result = run_susie(z=df["z"].values, R=R, n=5000, L=5)
         assert result["pip"].argmax() == 10
 
-    def test_alpha_rows_sum_to_one(self):
-        """Each row of alpha (posterior weights per signal) sums to 1."""
+    def test_alpha_rows_sum_to_at_most_one(self):
+        """With null component (default), alpha rows sum to <= 1.
+        Without null component, rows sum to exactly 1."""
         df = _small_locus(n=20)
         R = _identity_ld(20)
+        # With null component: rows sum to <= 1
         result = run_susie(z=df["z"].values, R=R, n=5000, L=3)
         row_sums = result["alpha"].sum(axis=1)
-        np.testing.assert_allclose(row_sums, 1.0, atol=1e-6)
+        assert np.all(row_sums <= 1.0 + 1e-6)
+        # Without null component: rows sum to exactly 1
+        result_nn = run_susie(z=df["z"].values, R=R, n=5000, L=3, null_weight=0.0)
+        row_sums_nn = result_nn["alpha"].sum(axis=1)
+        np.testing.assert_allclose(row_sums_nn, 1.0, atol=1e-6)
 
     def test_converges_on_clean_signal(self):
         """SuSiE converges within 100 iterations for a clean single signal."""
