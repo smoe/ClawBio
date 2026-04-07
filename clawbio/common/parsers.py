@@ -412,7 +412,11 @@ def parse_vcf_matrix(filepath: str | Path):
                     row.append(-1)
                 else:
                     allele_indices = gt_str.split("/")
-                    row.append(int(allele_indices[0]) + int(allele_indices[1]))
+                    if len(allele_indices) == 1:
+                        # Haploid genotype (e.g. chrX males): treat as homozygous
+                        row.append(int(allele_indices[0]) * 2)
+                    else:
+                        row.append(int(allele_indices[0]) + int(allele_indices[1]))
             genotype_rows.append(row)
 
     if not samples:
