@@ -77,8 +77,7 @@ UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
 OWNER_GENOME = CLAWBIO_DIR / "skills" / "genome-compare" / "data" / "manuel_corpas_23andme.txt.gz"
 
 # Security limits (TG-004)
-MAX_UPLOAD_BYTES = 20 * 1024 * 1024  # 20 MB — Telegram Bot API getFile() limit (not the client send limit)
-MAX_PHOTO_BYTES = 20 * 1024 * 1024   # 20 MB (Telegram photo limit)
+MAX_UPLOAD_BYTES = 20 * 1024 * 1024  # 20 MB — Telegram Bot API getFile() limit
 
 logging.basicConfig(
     level=logging.INFO,
@@ -1388,10 +1387,10 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         img_bytes = await file.download_as_bytearray()
 
         # File size check (TG-004)
-        if len(img_bytes) > MAX_PHOTO_BYTES:
+        if len(img_bytes) > MAX_UPLOAD_BYTES:
             await update.message.reply_text(
                 f"Photo too large ({len(img_bytes) / (1024*1024):.1f} MB). "
-                f"Maximum: {MAX_PHOTO_BYTES / (1024*1024):.0f} MB."
+                f"Maximum: {MAX_UPLOAD_BYTES / (1024*1024):.0f} MB."
             )
             return
 
