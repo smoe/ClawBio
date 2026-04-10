@@ -715,10 +715,6 @@ async def execute_save_file(args: dict) -> str:
     """Save the most recently received file to the requested destination."""
     chat_id = args.get("_chat_id")
     file_info = _received_files.get(chat_id) if chat_id else None
-    if file_info is None:
-        for _, info in _received_files.items():
-            file_info = info
-            break
 
     if not file_info:
         return "No recently received file to save. Send a file first."
