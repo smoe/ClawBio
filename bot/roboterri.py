@@ -70,8 +70,6 @@ CLAWBIO_PY = CLAWBIO_DIR / "clawbio.py"
 SOUL_MD = CLAWBIO_DIR / "SOUL.md"
 OUTPUT_DIR = CLAWBIO_DIR / "output"
 DATA_DIR = CLAWBIO_DIR / "data"
-UPLOADS_DIR = DATA_DIR / "uploads"
-UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
 
 # Owner's genome — used as default when admin asks about their own PGx/nutrition/risk
 OWNER_GENOME = CLAWBIO_DIR / "skills" / "genome-compare" / "data" / "manuel_corpas_23andme.txt.gz"
@@ -1410,11 +1408,10 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
 
         # Store for potential file-based skill use
-        upload_path = UPLOADS_DIR / f"{update.effective_chat.id}" / filename
-        upload_path.parent.mkdir(exist_ok=True)
-        upload_path.write_bytes(bytes(img_bytes))
+        tmp_path = Path(tempfile.gettempdir()) / f"roboterri_{update.effective_chat.id}_{filename}"
+        tmp_path.write_bytes(bytes(img_bytes))
         _received_files[update.effective_chat.id] = {
-            "path": str(upload_path), "filename": filename,
+            "path": str(tmp_path), "filename": filename,
         }
 
         caption = update.message.caption or ""
@@ -1501,26 +1498,14 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             return
 
-        # Clear any stale entry before download so a failure leaves no stale state
-        _received_files.pop(update.effective_chat.id, None)
-
-        upload_path = UPLOADS_DIR / f"{update.effective_chat.id}" / filename
-        upload_path.parent.mkdir(exist_ok=True)
-        await file.download_to_drive(str(upload_path))
-
-        if not upload_path.exists() or upload_path.stat().st_size == 0:
-            await update.message.reply_text(
-                "Download failed — the file appears to be empty or could not be saved. "
-                "Please try again."
-            )
-            return
-
+        tmp_path = Path(tempfile.gettempdir()) / f"roboterri_{update.effective_chat.id}_{filename}"
+        await file.download_to_drive(str(tmp_path))
         logger.info(f"Document received: {filename} ({file_size} bytes, {mime})")
         _audit("document", **_user_ctx(update), filename=filename,
                size_bytes=file_size, mime=mime)
 
         _received_files[update.effective_chat.id] = {
-            "path": str(upload_path), "filename": filename,
+            "path": str(tmp_path), "filename": filename,
         }
 
         # Auto-create a patient profile for follow-up skill calls
@@ -1528,7 +1513,7 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
         try:
             upload_proc = await asyncio.create_subprocess_exec(
                 sys.executable, str(CLAWBIO_PY), "upload",
-                "--input", str(upload_path),
+                "--input", str(tmp_path),
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
             )
