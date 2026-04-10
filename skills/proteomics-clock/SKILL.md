@@ -4,7 +4,7 @@ description: >-
   Compute organ-specific biological age from Olink proteomic data using
   Goeminne et al. (2025) elastic net aging clocks.
 version: 0.1.0
-author: ClawBio Contributors
+author: Maria Dermit
 domain: proteomics
 license: MIT
 
