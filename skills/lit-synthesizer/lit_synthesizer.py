@@ -16,7 +16,7 @@ import json
 import os
 import sys
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 import urllib.request
@@ -171,8 +171,9 @@ def search_biorxiv(query: str, max_results: int = 5) -> list[dict]:
     # bioRxiv API supports date-range + keyword in server/interval/cursor format.
     # We use the /details endpoint with a keyword search via the publisher's
     # simple query parameter (supported since 2023).
-    query_enc = urllib.parse.quote(query)
-    url = f"{BIORXIV_API_URL}/2023-01-01/2099-01-01/0/json"
+    start_date = "2023-01-01"
+    end_date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    url = f"{BIORXIV_API_URL}/{start_date}/{end_date}/0/json"
     papers = []
     try:
         with urllib.request.urlopen(url, timeout=10) as resp:
@@ -231,7 +232,7 @@ def generate_report(query: str, papers: list[dict], graph: dict, output_dir: Pat
     (output_dir / "tables").mkdir(exist_ok=True)
     (output_dir / "reproducibility").mkdir(exist_ok=True)
 
-    now = datetime.now().strftime("%Y-%m-%d %H:%M UTC")
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
     pubmed_count  = sum(1 for p in papers if p["source"] == "PubMed")
     biorxiv_count = sum(1 for p in papers if p["source"] == "bioRxiv")
 
@@ -277,7 +278,7 @@ def generate_report(query: str, papers: list[dict], graph: dict, output_dir: Pat
             f"| Field | Value |",
             f"|-------|-------|",
             f"| **Source** | {paper['source']} |",
-            f"| **Authors** | {', '.join(paper['authors'][:3])}{'et al.' if len(paper['authors']) > 3 else ''} |",
+            f"| **Authors** | {', '.join(paper['authors'][:3])}{' et al.' if len(paper['authors']) > 3 else ''} |",
             f"| **Journal** | {paper['journal']} |",
             f"| **Year** | {paper['year']} |",
             f"| **DOI** | {paper['doi'] or 'N/A'} |",
@@ -341,7 +342,7 @@ def generate_report(query: str, papers: list[dict], graph: dict, output_dir: Pat
 
 python skills/lit-synthesizer/lit_synthesizer.py \\
     --query "{query}" \\
-    --output {output_dir}
+    --output "{output_dir}"
 """
     (output_dir / "reproducibility" / "commands.sh").write_text(commands)
 

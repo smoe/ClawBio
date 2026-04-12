@@ -39,7 +39,7 @@ metadata:
       always: false
     homepage: https://github.com/ClawBio/ClawBio
     os:
-      - macos
+      - darwin
       - linux
     install:
       - kind: pip
