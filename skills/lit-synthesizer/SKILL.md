@@ -38,9 +38,8 @@ metadata:
     requires:
       always: false
     homepage: https://github.com/ClawBio/ClawBio
-    os:
-      - macos
-      - linux
+    os: [darwin, linux]
+    emoji: "📚"
     install:
       - kind: pip
         package: biopython
