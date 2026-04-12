@@ -1,4 +1,4 @@
-"""ClawBio common utilities — shared parsers, profiles, reports, checksums."""
+"""ClawBio common utilities — shared parsers, profiles, reports, checksums, reproducibility."""
 
 from clawbio.common.parsers import (
     detect_format,
@@ -20,6 +20,11 @@ from clawbio.common.scrna_io import (
     load_10x_mtx_data,
     resolve_input_source,
 )
+from clawbio.common.reproducibility import (
+    write_checksums,
+    write_environment_yml,
+    write_commands_sh,
+)
 
 __all__ = [
     "detect_format",
@@ -38,4 +43,7 @@ __all__ = [
     "load_count_adata",
     "load_10x_mtx_data",
     "resolve_input_source",
+    "write_checksums",
+    "write_environment_yml",
+    "write_commands_sh",
 ]
