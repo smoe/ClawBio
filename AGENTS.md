@@ -30,6 +30,7 @@ python clawbio.py run pharmgx --demo        # Run flagship skill demo
 | `python -m pytest -v` | Run all tests |
 | `python -m pytest skills/<name>/tests/ -v` | Run tests for one skill |
 | `python scripts/generate_catalog.py` | Regenerate `skills/catalog.json` |
+| `python scripts/lint_skills.py` | Run SKILL.md conformance linter |
 | `make test` | Alias for `python -m pytest -v` |
 | `make demo` | Run PharmGx demo |
 
