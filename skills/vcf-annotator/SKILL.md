@@ -1,9 +1,6 @@
 ---
 name: vcf-annotator
-description: >
-  Annotate VCF variants using Ensembl VEP, ClinVar, and gnomAD.
-  Ranks variants by predicted impact (HIGH/MODERATE/LOW/MODIFIER)
-  and generates a structured report with population frequency context.
+description: "Annotate VCF variants with Ensembl VEP, ClinVar, and gnomAD. Ranks variants by impact (HIGH/MODERATE/LOW/MODIFIER) and generates a reproducible report."
 version: 0.1.0
 author: Sooraj (github.com/sooraj-codes)
 domain: genomics

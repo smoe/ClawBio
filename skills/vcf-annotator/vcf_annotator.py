@@ -9,7 +9,7 @@ Usage:
     python vcf_annotator.py --demo --output /tmp/demo
 """
 
-import argparse
+import os
 import csv
 import hashlib
 import json
@@ -37,7 +37,7 @@ ENSEMBL_VEP_URL  = "https://rest.ensembl.org/vep/human/hgvs"
 CLINVAR_API_URL  = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi"
 GNOMAD_API_URL   = "https://gnomad.broadinstitute.org/api"
 TOOL_NAME        = "ClawBio-VCFAnnotator"
-TOOL_EMAIL       = "mc@manuelcorpas.com"
+TOOL_EMAIL       = os.environ.get("NCBI_TOOL_EMAIL", "clawbio@example.com")
 
 IMPACT_RANK = {"HIGH": 1, "MODERATE": 2, "LOW": 3, "MODIFIER": 4, "UNKNOWN": 5}
 
@@ -231,7 +231,7 @@ def annotate_vep(variant: dict) -> dict:
             result["polyphen"]    = tc.get("polyphen_prediction", "N/A")
         time.sleep(0.1)  # Ensembl rate limit
     except Exception as exc:
-        print(f"  [warn] VEP failed for {hgvs}: {exc}", file=sys.stderr)
+        print(f"  [warn] VEP failed for {hgvs}: {type(exc).__name__}: {exc}", file=sys.stderr)
 
     return result
 
@@ -261,7 +261,7 @@ def lookup_clinvar(rsid: str) -> dict:
             result["clinvar_significance"] = "Found in ClinVar"
         time.sleep(0.34)
     except Exception as exc:
-        print(f"  [warn] ClinVar lookup failed for {rsid}: {exc}", file=sys.stderr)
+        print(f"  [warn] ClinVar lookup failed for {rsid}: {type(exc).__name__}: {exc}", file=sys.stderr)
 
     return result
 
@@ -304,7 +304,7 @@ def lookup_gnomad(chrom: str, pos: str, ref: str, alt: str) -> dict:
                 result["gnomad_af_eur"] = pop["af"]
         time.sleep(0.2)
     except Exception as exc:
-        print(f"  [warn] gnomAD lookup failed for {variant_id}: {exc}", file=sys.stderr)
+        print(f"  [warn] gnomAD lookup failed for {variant_id}: {type(exc).__name__}: {exc}", file=sys.stderr)
 
     return result
 
