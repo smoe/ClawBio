@@ -551,6 +551,14 @@ SKILLS = {
         "no_input_required": True,
         "accepts_genotypes": False,
     },
+    "mr": {
+        "script": SKILLS_DIR / "mendelian-randomisation" / "mendelian_randomisation.py",
+        "demo_args": ["--demo"],
+        "description": "Mendelian Randomisation — two-sample MR with IVW, Egger, weighted median/mode + full sensitivity",
+        "allowed_extra_flags": {"--instruments"},
+        "no_input_required": True,
+        "accepts_genotypes": False,
+    },
 }
 
 # Skills that run in the full-profile pipeline (order matters)

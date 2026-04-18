@@ -1,9 +1,24 @@
 {
   "version": "1.0.0",
   "generated_by": "scripts/generate_catalog.py",
-  "skill_count": 46,
+  "skill_count": 49,
   "galaxy_tool_count": 8182,
   "skills": [
+    {
+      "name": "archaic-introgression",
+      "cli_alias": null,
+      "description": "Detect Neanderthal and Denisovan introgression segments from modern human genomes",
+      "version": "0.1.0",
+      "status": "planned",
+      "has_script": true,
+      "has_tests": true,
+      "has_demo": true,
+      "demo_command": "python skills/archaic-introgression/pipeline.py --demo",
+      "dependencies": [],
+      "tags": [],
+      "trigger_keywords": [],
+      "chaining_partners": []
+    },
     {
       "name": "bigquery-public",
       "cli_alias": "bigquery",
@@ -207,7 +222,7 @@
       "has_script": true,
       "has_tests": true,
       "has_demo": true,
-      "demo_command": "python skills/clinical-trial-finder/clinical_trial_finder.py --demo",
+      "demo_command": "python skills/clinical-trial-finder/gwas_bridge.py --demo",
       "dependencies": [],
       "tags": [
         "clinical-trials",
@@ -574,7 +589,7 @@
       "has_script": true,
       "has_tests": true,
       "has_demo": true,
-      "demo_command": "python skills/illumina-bridge/illumina_bridge.py --demo",
+      "demo_command": "python skills/illumina-bridge/illumina_bundle.py --demo",
       "dependencies": [],
       "tags": [
         "illumina",
@@ -613,15 +628,51 @@
     {
       "name": "lit-synthesizer",
       "cli_alias": null,
-      "description": "Search PubMed and bioRxiv, summarise papers with LLM, build citation graphs, and generate literature review sections.",
+      "description": "Search PubMed and bioRxiv for bioinformatics literature, synthesise results into a structured report, and build a citation graph — all locally, with a reproducibility bundle.",
       "version": "0.1.0",
       "status": "planned",
-      "has_script": false,
-      "has_tests": false,
-      "has_demo": false,
-      "demo_command": null,
-      "dependencies": [],
-      "tags": [],
+      "has_script": true,
+      "has_tests": true,
+      "has_demo": true,
+      "demo_command": "python skills/lit-synthesizer/lit_synthesizer.py --demo",
+      "dependencies": [
+        "biopython>=1.83"
+      ],
+      "tags": [
+        "literature",
+        "pubmed",
+        "biorxiv",
+        "citation",
+        "synthesis"
+      ],
+      "trigger_keywords": [],
+      "chaining_partners": []
+    },
+    {
+      "name": "mendelian-randomisation",
+      "cli_alias": null,
+      "description": "Two-sample Mendelian Randomisation from GWAS summary statistics with IVW, MR-Egger, weighted median/mode, and full sensitivity analysis (Cochran Q, Egger intercept, Steiger, F-statistic, leave-one-out).",
+      "version": "0.1.0",
+      "status": "planned",
+      "has_script": true,
+      "has_tests": true,
+      "has_demo": true,
+      "demo_command": "python skills/mendelian-randomisation/mendelian_randomisation.py --demo",
+      "dependencies": [
+        "numpy>=1.24",
+        "scipy>=1.10",
+        "matplotlib>=3.7"
+      ],
+      "tags": [
+        "mendelian-randomisation",
+        "causal-inference",
+        "two-sample-mr",
+        "ivw",
+        "mr-egger",
+        "gwas",
+        "genetic-epidemiology",
+        "drug-target-validation"
+      ],
       "trigger_keywords": [],
       "chaining_partners": []
     },
@@ -645,6 +696,33 @@
         "GEO",
         "illlumina-450k",
         "EPIC"
+      ],
+      "trigger_keywords": [],
+      "chaining_partners": []
+    },
+    {
+      "name": "multiqc-reporter",
+      "cli_alias": null,
+      "description": "Aggregates QC reports from any bioinformatics tool outputs (FastQC, fastp, STAR, Picard, samtools, etc.) into a single MultiQC HTML report plus a ClawBio markdown summary with per-sample QC metrics.",
+      "version": "0.1.0",
+      "status": "planned",
+      "has_script": true,
+      "has_tests": true,
+      "has_demo": true,
+      "demo_command": "python skills/multiqc-reporter/multiqc_reporter.py --demo",
+      "dependencies": [
+        "multiqc>=1.20"
+      ],
+      "tags": [
+        "qc",
+        "fastqc",
+        "multiqc",
+        "sequencing",
+        "alignment",
+        "rna-seq",
+        "wgs",
+        "wes",
+        "aggregation"
       ],
       "trigger_keywords": [],
       "chaining_partners": []
@@ -810,7 +888,7 @@
       "has_script": true,
       "has_tests": true,
       "has_demo": true,
-      "demo_command": "python skills/pubmed-summariser/pubmed_api.py --demo",
+      "demo_command": "python skills/pubmed-summariser/pubmed_summariser.py --demo",
       "dependencies": [],
       "tags": [],
       "trigger_keywords": [],
