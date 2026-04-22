@@ -1401,6 +1401,48 @@
       "chaining_partners": []
     },
     {
+      "name": "turingdb-graph",
+      "cli_alias": null,
+      "description": "Build, query, and analyse biomedical knowledge graphs in TuringDB, a columnar graph database with git-like versioning.",
+      "version": "0.1.0",
+      "status": "planned",
+      "has_script": true,
+      "has_tests": true,
+      "has_demo": true,
+      "demo_command": "python skills/turingdb-graph/http_server.py --demo",
+      "dependencies": [
+        "python>=3.11",
+        "turingdb>=1.29",
+        "pandas>=2.0",
+        "fastapi>=0.110",
+        "uvicorn>=0.27",
+        "pydantic>=2.0",
+        "tabulate>=0.9"
+      ],
+      "tags": [
+        "graph-database",
+        "knowledge-graph",
+        "turingdb",
+        "cypher",
+        "biomedical",
+        "patient-cohort",
+        "pathway"
+      ],
+      "trigger_keywords": [
+        "knowledge graph",
+        "biomedical graph",
+        "turingdb",
+        "cypher query",
+        "patient cohort graph",
+        "pathway graph",
+        "graph database",
+        "build a graph from CSV",
+        "comorbidity analysis",
+        "comedication analysis"
+      ],
+      "chaining_partners": []
+    },
+    {
       "name": "ukb-navigator",
       "cli_alias": null,
       "description": "Semantic search across UK Biobank's 12,000+ data fields and publications — find the right variables for your research question.",
