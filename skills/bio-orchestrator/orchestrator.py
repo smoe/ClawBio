@@ -331,13 +331,23 @@ def detect_skill_with_hint_from_query(query: str) -> tuple[str | None, str]:
             "with `--use-rep X_scvi` on `integrated.h5ad` to run clustering, annotation, "
             "and contrastive markers after scVI.",
         )
-    if wants_embedding and wants_downstream:
-        return (
-            "scrna-embedding",
-            "Detected a two-step advanced scRNA workflow. First run `scrna-embedding` to "
-            "produce `integrated.h5ad`, then run `scrna-orchestrator` with "
-            "`--use-rep X_scvi` for downstream clustering, annotation, and contrastive markers.",
-        )
+
+    if wants_embedding:
+        if wants_downstream:
+            return (
+                "scrna-embedding",
+                "Detected a two-step advanced scRNA workflow. First run `scrna-embedding` to "
+                "produce `integrated.h5ad`, then run `scrna-orchestrator` with "
+                "`--use-rep X_scvi` for downstream clustering, annotation, and contrastive markers.",
+            )
+        if not has_latent_artifact:
+            return (
+                "scrna-embedding",
+                "Detected an embedding-focused scRNA workflow. Use `scrna-embedding` to "
+                "produce `integrated.h5ad` with a scVI/scANVI latent space before "
+                "running downstream clustering or annotation.",
+            )
+
     # Prefer longest keyword match to avoid ambiguity (e.g. "variant annotation"
     # should match vcf-annotator, not equity-scorer via "variant" substring)
     best_skill = None
