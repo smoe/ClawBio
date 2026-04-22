@@ -324,6 +324,8 @@ def detect_skill_with_hint_from_query(query: str) -> tuple[str | None, str]:
     wants_downstream = any(term in query_lower for term in SCRNA_DOWNSTREAM_TERMS)
     has_latent_artifact = any(term in query_lower for term in SCRNA_LATENT_ARTIFACT_TERMS)
 
+    # Chain-aware scRNA routing favors explicit embedding requests unless the
+    # user is clearly asking for downstream analysis on an existing latent artifact.
     if has_latent_artifact and wants_downstream:
         return (
             "scrna-orchestrator",
@@ -331,22 +333,27 @@ def detect_skill_with_hint_from_query(query: str) -> tuple[str | None, str]:
             "with `--use-rep X_scvi` on `integrated.h5ad` to run clustering, annotation, "
             "and contrastive markers after scVI.",
         )
-
+    if wants_embedding and wants_downstream:
+        return (
+            "scrna-embedding",
+            "Detected a two-step advanced scRNA workflow. First run `scrna-embedding` to "
+            "produce `integrated.h5ad`, then run `scrna-orchestrator` with "
+            "`--use-rep X_scvi` for downstream clustering, annotation, and contrastive markers.",
+        )
+    if wants_embedding and has_latent_artifact:
+        return (
+            "scrna-embedding",
+            "Detected an embedding-focused scRNA workflow on an existing latent artifact. "
+            "Use `scrna-embedding` to refresh or rebuild the scVI/scANVI latent space "
+            "before downstream clustering or annotation.",
+        )
     if wants_embedding:
-        if wants_downstream:
-            return (
-                "scrna-embedding",
-                "Detected a two-step advanced scRNA workflow. First run `scrna-embedding` to "
-                "produce `integrated.h5ad`, then run `scrna-orchestrator` with "
-                "`--use-rep X_scvi` for downstream clustering, annotation, and contrastive markers.",
-            )
-        if not has_latent_artifact:
-            return (
-                "scrna-embedding",
-                "Detected an embedding-focused scRNA workflow. Use `scrna-embedding` to "
-                "produce `integrated.h5ad` with a scVI/scANVI latent space before "
-                "running downstream clustering or annotation.",
-            )
+        return (
+            "scrna-embedding",
+            "Detected an embedding-focused scRNA workflow. Use `scrna-embedding` to "
+            "produce `integrated.h5ad` with a scVI/scANVI latent space before "
+            "running downstream clustering or annotation.",
+        )
 
     # Prefer longest keyword match to avoid ambiguity (e.g. "variant annotation"
     # should match vcf-annotator, not equity-scorer via "variant" substring)
