@@ -24,6 +24,7 @@ import logging
 import os
 import re
 import shutil
+import subprocess
 import sys
 import tempfile
 import time
@@ -41,6 +42,31 @@ from telegram.ext import (
     MessageHandler,
     filters,
 )
+
+try:
+    from action_offers import (
+        choice_list_text,
+        execute_stored_action,
+        extract_action_offer,
+        extract_chat_summary_lines,
+        is_pending_action_expired,
+        load_bundle_fields,
+        make_pending_action_entry,
+        parse_action_reply,
+        render_action_offer,
+    )
+except ImportError:
+    from bot.action_offers import (
+        choice_list_text,
+        execute_stored_action,
+        extract_action_offer,
+        extract_chat_summary_lines,
+        is_pending_action_expired,
+        load_bundle_fields,
+        make_pending_action_entry,
+        parse_action_reply,
+        render_action_offer,
+    )
 
 # --------------------------------------------------------------------------- #
 # Config
@@ -201,8 +227,14 @@ _received_files: dict[int, dict] = {}
 # Pending media queue: chat_id -> list of {"type": "document"|"photo", "path": str}
 _pending_media: dict[int, list[dict]] = {}
 
-# Pending text queue: bypass LLM paraphrasing for compare/drugphoto
+# Pending text queue: bypass LLM paraphrasing when tool output must be relayed
+# exactly as produced. Keys are chat ids so parallel chats do not mix replies.
 _pending_text: dict[int, list[str]] = {}
+
+# Pending suggested follow-up actions: chat_id -> offer bundle. The bundle
+# stores the exact structured actions produced by a skill, so confirmation can
+# only select from those actions.
+_pending_actions: dict[int, dict] = {}
 
 BOT_START_TIME = time.time()
 
@@ -418,6 +450,185 @@ TOOLS = [
 # --------------------------------------------------------------------------- #
 
 
+def _run_skill_local_sync(
+    *,
+    skill_name: str,
+    input_path: str | None = None,
+    output_dir: str | None = None,
+    demo: bool = False,
+    extra_args: list[str] | None = None,
+    timeout: int = 300,
+    profile_path: str | None = None,
+) -> dict:
+    """Run a stored follow-up action through the same CLI path used by the bot."""
+    cmd = [sys.executable, str(CLAWBIO_PY), "run", skill_name]
+    if demo:
+        cmd.append("--demo")
+    elif profile_path:
+        cmd.extend(["--profile", profile_path])
+    elif input_path:
+        cmd.extend(["--input", str(input_path)])
+    if output_dir:
+        cmd.extend(["--output", str(output_dir)])
+    if extra_args:
+        cmd.extend(extra_args)
+
+    proc = subprocess.run(
+        cmd,
+        cwd=str(CLAWBIO_DIR),
+        text=True,
+        capture_output=True,
+        timeout=timeout,
+    )
+    return _skill_result_from_output(
+        skill_name=skill_name,
+        stdout=proc.stdout,
+        stderr=proc.stderr,
+        exit_code=proc.returncode,
+        output_dir=output_dir,
+    )
+
+
+def _skill_result_from_output(
+    *,
+    skill_name: str,
+    stdout: str,
+    stderr: str,
+    exit_code: int,
+    output_dir: str | Path | None,
+) -> dict:
+    """Build the small runner-like result shape the chat renderer consumes."""
+    out_dir = Path(output_dir) if output_dir else None
+    files = (
+        sorted(str(f.relative_to(out_dir)) for f in out_dir.rglob("*") if f.is_file())
+        if out_dir and out_dir.exists()
+        else []
+    )
+    result = {
+        "skill": skill_name,
+        "success": exit_code == 0,
+        "exit_code": exit_code,
+        "output_dir": str(out_dir) if out_dir else None,
+        "files": files,
+        "stdout": stdout,
+        "stderr": stderr,
+    }
+    if exit_code == 0:
+        # The subprocess is still the source of execution truth; result.json is
+        # only the structured envelope we read afterward for summaries,
+        # preferred artifacts, and suggested follow-up actions.
+        result.update(load_bundle_fields(out_dir))
+    return result
+
+
+def _trim_report_for_chat(report_text: str) -> str:
+    """Trim verbose report sections while keeping the disclaimer."""
+    # The full report remains attached as a document. Chat gets the sections
+    # that are useful in-line, while dense methods/provenance blocks stay in
+    # the generated report file.
+    keep_lines: list[str] = []
+    skip = False
+    for line in report_text.split("\n"):
+        if line.startswith("## Chromosome Breakdown"):
+            skip = True
+        elif line.startswith("## Ancestry Composition"):
+            skip = False
+        elif line.startswith("## Methods"):
+            skip = True
+        elif line.startswith("## About"):
+            skip = False
+        elif line.startswith("## Reproducibility"):
+            skip = True
+        elif line.startswith("## Disclaimer"):
+            skip = False
+        if line.startswith("!["):
+            continue
+        if not skip:
+            keep_lines.append(line)
+    return "\n".join(keep_lines).strip()
+
+
+def _queue_output_media(chat_id: int, output_dir: Path | None) -> None:
+    """Queue generated reports and figures for chat delivery."""
+    if output_dir is None or not output_dir.exists():
+        return
+    media_items: list[dict[str, str]] = []
+    # Text replies go first; generated reports and PNG figures are drained
+    # afterward so Telegram users still receive the complete output bundle.
+    for f in sorted(output_dir.rglob("*")):
+        if not f.is_file():
+            continue
+        if f.suffix in (".md", ".html"):
+            media_items.append({"type": "document", "path": str(f)})
+        elif f.suffix == ".png":
+            media_items.append({"type": "photo", "path": str(f)})
+    if media_items:
+        _pending_media[chat_id] = _pending_media.get(chat_id, []) + media_items
+
+
+def _render_skill_result(chat_id: int, skill_key: str, result: dict) -> str:
+    """Turn a structured runner result into the user-facing chat reply."""
+    output_dir = Path(result["output_dir"]) if result.get("output_dir") else None
+    _queue_output_media(chat_id, output_dir)
+
+    # Prefer skill-authored chat_summary_lines when present. They are the only
+    # text path short enough for chat while still being produced by the skill
+    # rather than inferred by the LLM.
+    raw_output = str(result.get("stdout", "") or "").strip()
+    report_text = str(result.get("report_md", "") or "").strip()
+    summary_lines = extract_chat_summary_lines(result)
+    actions = extract_action_offer(result)
+
+    if actions:
+        # When a skill returns structured suggested actions, we treat the skill
+        # result as the authoritative conversational surface. The adapter
+        # renders the summary plus explicit numbered offers and stores the exact
+        # action payloads for a later confirmation turn.
+        reply_parts: list[str] = []
+        if summary_lines:
+            reply_parts.append("\n".join(summary_lines))
+        elif report_text:
+            reply_parts.append(_trim_report_for_chat(report_text))
+        elif raw_output:
+            reply_parts.append(raw_output)
+        else:
+            reply_parts.append(f"{skill_key} completed.")
+        reply_parts.append(render_action_offer(actions))
+        rendered = "\n\n".join(part for part in reply_parts if part).strip()
+        _pending_actions[chat_id] = make_pending_action_entry(
+            skill=skill_key,
+            actions=actions,
+            source_summary=summary_lines,
+            source_output_dir=str(output_dir) if output_dir else None,
+        )
+        _audit(
+            "action_offer",
+            chat_id=chat_id,
+            skill=skill_key,
+            action_ids=[action.get("action_id") for action in actions],
+            output_dir=str(output_dir) if output_dir else None,
+        )
+        # Queue the rendered text directly so the LLM loop does not paraphrase
+        # or re-infer the offer from prose. The structured skill result already
+        # made the deterministic next-step choices for us.
+        _pending_text.setdefault(chat_id, []).append(rendered)
+        return "Result sent directly to chat. Do not repeat or paraphrase it."
+
+    _pending_actions.pop(chat_id, None)
+
+    if skill_key in ("compare", "drugphoto", "profile"):
+        rendered = raw_output or report_text or f"{skill_key} completed."
+        if rendered:
+            _pending_text.setdefault(chat_id, []).append(rendered)
+        return "Result sent directly to chat. Do not repeat or paraphrase it."
+
+    if summary_lines:
+        return "\n".join(summary_lines)
+    if report_text:
+        return _trim_report_for_chat(report_text)
+    return raw_output if raw_output else f"{skill_key} completed. Output: {output_dir}"
+
+
 async def execute_clawbio(args: dict) -> str:
     """Execute a ClawBio bioinformatics skill via subprocess."""
     skill_key = args.get("skill", "auto")
@@ -498,11 +709,11 @@ async def execute_clawbio(args: dict) -> str:
     # Build output directory
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
     out_dir = OUTPUT_DIR / f"{skill_key}_{ts}"
-
-    # Build command
+    # Keep the normal bot execution path as close as possible to the CLI call
+    # used on main. The suggested-action feature only needs to inspect the
+    # bundle after the subprocess finishes.
     cmd = [sys.executable, str(CLAWBIO_PY), "run", skill_key]
 
-    # Profile-based skills: prefer --profile over --input
     if skill_key == "profile":
         if mode == "demo":
             cmd.append("--demo")
@@ -543,11 +754,9 @@ async def execute_clawbio(args: dict) -> str:
     elif input_path:
         cmd.extend(["--input", str(input_path)])
 
-    # Skills with summary_default (compare, drugphoto) skip --output
     if skill_key not in ("compare", "drugphoto"):
         cmd.extend(["--output", str(out_dir)])
 
-    # Pass drug_name and visible_dose for drugphoto
     if skill_key == "drugphoto":
         drug_name = args.get("drug_name", "")
         visible_dose = args.get("visible_dose", "")
@@ -577,69 +786,18 @@ async def execute_clawbio(args: dict) -> str:
         err = stderr_str[-1500:] if stderr_str else stdout_str[-1500:] if stdout_str else "unknown error"
         return f"{skill_key} failed (exit {proc.returncode}):\n{err}"
 
-    # For compare / drugphoto / profile: send stdout directly (bypass LLM paraphrasing)
-    if skill_key in ("compare", "drugphoto", "profile"):
-        raw_output = stdout_str.strip()
-        if raw_output:
-            chat_id = args.get("_chat_id")
-            if chat_id:
-                _pending_text.setdefault(chat_id, []).append(raw_output)
-        return "Result sent directly to chat. Do not repeat or paraphrase it."
+    # Wrap the subprocess output in a small runner-like dict so normal skill
+    # replies and confirmed follow-up actions share one rendering path.
+    result = _skill_result_from_output(
+        skill_name=skill_key,
+        stdout=stdout_str,
+        stderr=stderr_str,
+        exit_code=proc.returncode,
+        output_dir=None if skill_key in ("compare", "drugphoto") else out_dir,
+    )
 
-    # For other skills: collect report + figures from output directory
-    output_files = sorted([f.name for f in out_dir.rglob("*") if f.is_file()]) if out_dir.exists() else []
-
-    # Queue figures and reports for Telegram delivery
-    if out_dir.exists():
-        media_items = []
-        for f in sorted(out_dir.rglob("*")):
-            if not f.is_file():
-                continue
-            if f.suffix in (".md", ".html"):
-                media_items.append({"type": "document", "path": str(f)})
-            elif f.suffix == ".png":
-                media_items.append({"type": "photo", "path": str(f)})
-        if media_items:
-            _pending_media[chat_id] = _pending_media.get(chat_id, []) + media_items
-
-    # Read report for chat display
-    report_text = ""
-    if out_dir.exists():
-        for pattern in ["report.md", "*_report.md", "*.md"]:
-            for md_file in sorted(out_dir.glob(pattern)):
-                if md_file.name.startswith("."):
-                    continue
-                report_text = md_file.read_text(encoding="utf-8")
-                break
-            if report_text:
-                break
-
-    if not report_text:
-        return stdout_str if stdout_str else f"{skill_key} completed. Output: {out_dir}"
-
-    # Trim verbose sections for Telegram readability but ALWAYS keep disclaimer.
-    # Full report is preserved on disk at out_dir.
-    keep_lines = []
-    skip = False
-    for line in report_text.split("\n"):
-        if line.startswith("## Chromosome Breakdown"):
-            skip = True
-        elif line.startswith("## Ancestry Composition"):
-            skip = False
-        elif line.startswith("## Methods"):
-            skip = True
-        elif line.startswith("## About"):
-            skip = False
-        elif line.startswith("## Reproducibility"):
-            skip = True
-        elif line.startswith("## Disclaimer"):
-            skip = False  # always show disclaimer
-        if line.startswith("!["):
-            continue
-        if not skip:
-            keep_lines.append(line)
-
-    return "\n".join(keep_lines).strip()
+    chat_id = args.get("_chat_id")
+    return _render_skill_result(chat_id, skill_key, result)
 
 
 # --------------------------------------------------------------------------- #
@@ -1146,6 +1304,124 @@ async def send_long_message(update: Update, text: str):
             await update.message.reply_text(chunk)
 
 
+async def _maybe_handle_pending_action_reply(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    user_text: str,
+) -> bool:
+    """Handle confirmation/cancel replies for structured suggested actions."""
+    chat_id = update.effective_chat.id
+    pending = _pending_actions.get(chat_id)
+    if not pending:
+        return False
+
+    actions = pending.get("actions", [])
+    parsed = parse_action_reply(user_text, actions)
+    if parsed["kind"] == "none":
+        # A non-match should usually fall back to the normal LLM path. The only
+        # exception is stale state: if the offer has expired, clear it so an
+        # unrelated later message cannot accidentally confirm an old action.
+        if is_pending_action_expired(pending):
+            _pending_actions.pop(chat_id, None)
+            _audit("action_offer_expired", chat_id=chat_id, skill=pending.get("skill"))
+        return False
+
+    if is_pending_action_expired(pending):
+        _pending_actions.pop(chat_id, None)
+        _audit("action_offer_expired", chat_id=chat_id, skill=pending.get("skill"))
+        await update.message.reply_text(
+            "That earlier action offer has expired. Please ask me to run the status check again."
+        )
+        return True
+
+    if parsed["kind"] == "cancel":
+        _pending_actions.pop(chat_id, None)
+        _audit("action_cancelled", chat_id=chat_id, skill=pending.get("skill"))
+        await update.message.reply_text("Okay — I won't run any of those follow-up actions.")
+        return True
+
+    if parsed["kind"] == "ambiguous":
+        _audit("action_confirmation_ambiguous", chat_id=chat_id, skill=pending.get("skill"))
+        await update.message.reply_text(
+            f"Which one would you like me to run: {choice_list_text(actions)}?"
+        )
+        return True
+
+    action = parsed["action"]
+    action_id = action.get("action_id")
+    label = str(action.get("label") or action_id or "that action")
+    _pending_actions.pop(chat_id, None)
+    _audit(
+        "action_confirmed",
+        chat_id=chat_id,
+        skill=pending.get("skill"),
+        action_id=action_id,
+        label=label,
+    )
+
+    await update.message.reply_text(f"Running {label}...")
+    await context.bot.send_chat_action(chat_id=chat_id, action="typing")
+
+    try:
+        # Execute the stored structured request verbatim through the normal
+        # skill execution path. We do not rebuild a shell command from the
+        # human reply.
+        result = await asyncio.to_thread(
+            execute_stored_action,
+            pending,
+            action,
+            runner=_run_skill_local_sync,
+            output_root=OUTPUT_DIR,
+        )
+    except Exception as exc:
+        _audit(
+            "action_execute_error",
+            chat_id=chat_id,
+            skill=pending.get("skill"),
+            action_id=action_id,
+            error=str(exc)[:300],
+        )
+        await update.message.reply_text(
+            f"That follow-up action failed before it could start properly: {exc}"
+        )
+        return True
+
+    _audit(
+        "action_execute",
+        chat_id=chat_id,
+        skill=pending.get("skill"),
+        action_id=action_id,
+        success=bool(result.get("success")),
+        output_dir=result.get("output_dir"),
+    )
+
+    if result.get("success"):
+        reply = _render_skill_result(chat_id, str(pending.get("skill") or ""), result)
+    else:
+        err = str(result.get("stderr") or result.get("stdout") or "unknown error")
+        reply = (
+            f"{pending.get('skill', 'follow-up action')} failed "
+            f"(exit {result.get('exit_code', -1)}):\n{err[-1500:]}"
+        )
+
+    pending_text = _pending_text.pop(chat_id, None)
+    if pending_text:
+        # Structured follow-up runs may themselves produce another direct
+        # summary/action-offer block, so prefer the queued text over any stale
+        # fallback assembled above.
+        reply = "\n\n".join(pending_text)
+    await send_long_message(update, reply)
+    await _drain_pending_media(update, context)
+
+    if context.user_data.get("voice_replies"):
+        try:
+            await _send_voice_reply(context.bot, chat_id, reply)
+        except Exception as ve:
+            logger.warning(f"Voice reply failed: {ve}")
+
+    return True
+
+
 # --------------------------------------------------------------------------- #
 # Command handlers
 # --------------------------------------------------------------------------- #
@@ -1374,6 +1650,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.info(f"Message from {update.effective_user.first_name}: {user_text[:100]}")
     _audit("message", **_user_ctx(update), text_preview=user_text[:200],
            text_len=len(user_text))
+
+    if await _maybe_handle_pending_action_reply(update, context, user_text):
+        return
 
     try:
         await context.bot.send_chat_action(

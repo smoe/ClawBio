@@ -666,6 +666,72 @@ def upload_profile(
 # --------------------------------------------------------------------------- #
 
 
+def _load_structured_skill_result(out_dir: Path | None) -> tuple[dict | None, Path | None]:
+    """Load a skill's result.json envelope when present and valid."""
+    if out_dir is None:
+        return None, None
+    result_json_path = out_dir / "result.json"
+    if not result_json_path.exists():
+        return None, None
+    try:
+        payload = json.loads(result_json_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None, result_json_path
+    if not isinstance(payload, dict):
+        return None, result_json_path
+    return payload, result_json_path
+
+
+def _load_report_markdown(out_dir: Path | None) -> str | None:
+    """Read the primary markdown report from an output bundle when present."""
+    if out_dir is None or not out_dir.exists():
+        return None
+    for pattern in ("report.md", "*_report.md", "*.md"):
+        for md_file in sorted(out_dir.glob(pattern)):
+            if md_file.name.startswith("."):
+                continue
+            try:
+                return md_file.read_text(encoding="utf-8")
+            except OSError:
+                continue
+    return None
+
+
+def _promote_structured_result_fields(result: dict, out_dir: Path | None) -> None:
+    """Attach parsed result.json fields to the top-level run result."""
+    payload, result_json_path = _load_structured_skill_result(out_dir)
+    if payload is not None:
+        result["skill_result_json"] = payload
+    if result_json_path is not None:
+        result["result_json_path"] = str(result_json_path)
+
+    if isinstance(payload, dict):
+        # Structured result fields form the small skill-to-ClawBio display
+        # contract:
+        # - chat_summary_lines: concise, skill-authored text for chat UIs
+        # - preferred_artifacts: generated files the UI should surface first
+        # - suggested_actions: deterministic next-step requests to offer later
+        # - report_md: full markdown report text, when embedded in result.json
+        #
+        # Promoting them keeps direct Python callers and chat adapters from
+        # reopening result.json just to discover the same structured contract.
+        for field in (
+            "chat_summary_lines",
+            "preferred_artifacts",
+            "suggested_actions",
+            "report_md",
+        ):
+            if field in payload:
+                result[field] = payload[field]
+
+    # Some legacy skills only emit a markdown report on disk. Keep report text
+    # available at the top level even when result.json does not carry it.
+    if "report_md" not in result:
+        report_md = _load_report_markdown(out_dir)
+        if report_md is not None:
+            result["report_md"] = report_md
+
+
 def run_skill(
     skill_name: str,
     input_path: str | None = None,
@@ -847,6 +913,9 @@ def run_skill(
         "stderr": proc.stderr,
         "duration_seconds": duration,
     }
+
+    if result["success"]:
+        _promote_structured_result_fields(result, out_dir)
 
     # If profile was used, store the result back into it
     if profile_path and result["success"] and out_dir:
