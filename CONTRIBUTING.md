@@ -33,6 +33,14 @@ skills/your-skill-name/
     └── expected_output.md
 ```
 
+If your skill requires a conda environment, add an `environment.yml` using `conda-forge` as the sole channel and `nodefaults` to prevent fallback to the Anaconda `defaults` channel (which has commercial licensing restrictions):
+
+```yaml
+channels:
+  - conda-forge
+  - nodefaults
+```
+
 ### 4. Test locally
 
 ```bash
