@@ -1,9 +1,3 @@
-<p align="center">
-  <a href="https://lu.ma/clawbio-hackathon">
-    <img src="img/westminster-hackathon.png" alt="ClawBio Hackathon, University of Westminster, London, Thursday 23 April, 12:00-19:00" width="600">
-  </a>
-</p>
-
 <h3 align="center">ClawBio</h3>
 
 <p align="center">
@@ -19,16 +13,6 @@
   <a href="https://doi.org/10.5281/zenodo.19420648"><img src="https://zenodo.org/badge/DOI/10.5281/zenodo.19420648.svg" alt="DOI"></a>
   <a href="https://github.com/ClawBio/ClawBio/issues"><img src="https://img.shields.io/github/issues/ClawBio/ClawBio" alt="Open Issues"></a>
   <a href="https://clawbio.github.io/ClawBio/slides/"><img src="https://img.shields.io/badge/slides-London_Bioinformatics_Meetup-purple" alt="Slides"></a>
-</p>
-
-<p align="center">
-  <a href="https://luma.com/8qtu0xaz"><img src="https://img.shields.io/badge/%F0%9F%A7%AC_Hackathon-23_Apr_2026_%C2%B7_London-ff6600?style=for-the-badge" alt="Hackathon: 23 Apr 2026"></a>
-</p>
-
-<p align="center">
-  <strong>AI Agents for Health: ClawBio Hackathon</strong><br>
-  Thu 23 April 2026, 12:00-19:00 · University of Westminster, Cavendish Campus, London<br>
-  <a href="https://luma.com/8qtu0xaz">Register free on Luma</a>
 </p>
 
 ---
