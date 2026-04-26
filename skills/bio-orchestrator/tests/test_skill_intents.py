@@ -158,3 +158,89 @@ def test_raw_text_can_override_weak_requested_skill(tmp_path: Path):
     assert plan.skill == "fixture-skill"
     assert plan.intent_id == "runtime_version"
     assert plan.requested_skill == "other-skill"
+
+
+def test_execution_root_can_differ_from_symlinked_descriptor_root(tmp_path: Path):
+    clawbio_root = tmp_path / "ClawBio"
+    external_root = tmp_path / "gentle_rs" / "integrations" / "clawbio"
+    external_skill = external_root / "skills" / "gentle-cloning"
+    (external_skill / "examples").mkdir(parents=True)
+    (external_skill / "examples" / "request_runtime_version.json").write_text("{}", encoding="utf-8")
+    script = external_skill / "gentle_cloning.py"
+    script.write_text("print('gentle')\n", encoding="utf-8")
+    (external_skill / "INTENTS.json").write_text(
+        json.dumps(
+            {
+                "schema": SCHEMA,
+                "skill": "gentle-cloning",
+                "routes": [
+                    {
+                        "intent_id": "runtime_version",
+                        "trigger_terms": ["version"],
+                        "plan": [
+                            {
+                                "kind": "skill_run",
+                                "skill": "gentle-cloning",
+                                "input": "examples/request_runtime_version.json",
+                            }
+                        ],
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    registry_skill = clawbio_root / "skills" / "gentle-cloning"
+    registry_skill.parent.mkdir(parents=True)
+    registry_skill.symlink_to(external_skill, target_is_directory=True)
+    registry = {"gentle-cloning": {"script": registry_skill / "gentle_cloning.py"}}
+
+    plan = plan_skill_intent(
+        user_text="check gentle version",
+        requested_skill="auto",
+        requested_mode=None,
+        attachments=None,
+        skill_registry=registry,
+        project_root=clawbio_root,
+    )
+
+    assert plan.intent_id == "runtime_version"
+    assert plan.executions[0].argv[1] == str(clawbio_root / "clawbio.py")
+    assert plan.executions[0].input_path.endswith(
+        "gentle_rs/integrations/clawbio/skills/gentle-cloning/examples/request_runtime_version.json"
+    )
+
+
+def test_confirmed_demo_tool_call_is_allowed(tmp_path: Path):
+    registry = _fixture_registry(tmp_path)
+
+    plan = plan_skill_intent(
+        user_text="yes, go ahead",
+        requested_skill="fixture-skill",
+        requested_mode="demo",
+        attachments=None,
+        skill_registry=registry,
+    )
+
+    assert plan.status == "planned"
+    assert plan.executions[0].argv[-1] == "--demo"
+
+
+def test_drugphoto_keeps_demo_genotype_exception(tmp_path: Path):
+    skill_dir = tmp_path / "skills" / "pharmgx-reporter"
+    skill_dir.mkdir(parents=True)
+    script = skill_dir / "pharmgx_reporter.py"
+    script.write_text("print('drugphoto')\n", encoding="utf-8")
+    registry = {"drugphoto": {"script": script, "demo_args": ["--demo"], "summary_default": True}}
+
+    plan = plan_skill_intent(
+        user_text="Medication photo shows clopidogrel 75mg",
+        requested_skill="drugphoto",
+        requested_mode="demo",
+        attachments=[{"drug_name": "clopidogrel"}, {"visible_dose": "75mg"}],
+        skill_registry=registry,
+    )
+
+    assert plan.status == "planned"
+    assert "--demo" in plan.executions[0].argv
+    assert "--drug" in plan.executions[0].argv

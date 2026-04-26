@@ -90,6 +90,7 @@ def plan_skill_intent(
     requested_mode: str | None,
     attachments: list | None,
     skill_registry: dict,
+    project_root: str | Path | None = None,
 ) -> SkillExecutionPlan:
     """Plan one or more ClawBio skill executions from platform-neutral inputs.
 
@@ -99,9 +100,9 @@ def plan_skill_intent(
     """
 
     text = user_text or ""
-    explicit_demo = _contains_any(text, _DEMO_TERMS)
+    explicit_demo = _demo_allowed(text, requested_mode)
     effective_mode = _normalise_mode(requested_mode, explicit_demo)
-    project_root = _project_root_from_registry(skill_registry)
+    execution_root = Path(project_root) if project_root else _project_root_from_registry(skill_registry)
     descriptors = load_skill_intent_descriptors(skill_registry)
     requested_skill = _resolve_skill_alias(requested_skill, skill_registry, descriptors)
 
@@ -118,7 +119,7 @@ def plan_skill_intent(
             route=route,
             score=score,
             matched_terms=matched_terms,
-            project_root=project_root,
+            project_root=execution_root,
         )
 
     return _plan_legacy_fallback(
@@ -129,7 +130,7 @@ def plan_skill_intent(
         explicit_demo=explicit_demo,
         attachments=attachments or [],
         skill_registry=skill_registry,
-        project_root=project_root,
+        project_root=execution_root,
     )
 
 
@@ -162,6 +163,33 @@ def load_skill_intent_descriptors(skill_registry: dict) -> list[dict[str, Any]]:
             descriptors.append(data)
             break
     return descriptors
+
+
+def skill_names_for_tool_schema(skill_registry: dict) -> list[str]:
+    """Return registry and descriptor skill names suitable for chat tool enums."""
+
+    names = set(skill_registry.keys())
+    for descriptor in load_skill_intent_descriptors(skill_registry):
+        if descriptor.get("skill"):
+            names.add(str(descriptor["skill"]))
+    names.add("auto")
+    return sorted(names)
+
+
+def skill_intent_tool_summary(skill_registry: dict) -> str:
+    """Compact human-readable descriptor route summary for LLM tool descriptions."""
+
+    summaries = []
+    for descriptor in load_skill_intent_descriptors(skill_registry):
+        skill = descriptor.get("skill") or descriptor.get("_registry_alias")
+        intents = [
+            str(route.get("intent_id"))
+            for route in descriptor.get("routes", [])
+            if isinstance(route, dict) and route.get("intent_id")
+        ]
+        if intents:
+            summaries.append(f"{skill} intents: {', '.join(intents)}")
+    return "; ".join(summaries)
 
 
 def _plan_descriptor_route(
@@ -294,7 +322,7 @@ def _plan_legacy_fallback(
             extra_args.extend(["--dose", dose])
 
     argv = [sys.executable, str(project_root / "clawbio.py"), "run", skill]
-    if explicit_demo and effective_mode == "demo":
+    if (explicit_demo and effective_mode == "demo") or (skill == "drugphoto" and requested_mode == "demo"):
         argv.append("--demo")
     elif skill in ("profile", "prs") and profile_path:
         argv.extend(["--profile", profile_path])
@@ -387,6 +415,12 @@ def _normalise_mode(requested_mode: str | None, explicit_demo: bool) -> str | No
     return None
 
 
+def _demo_allowed(text: str, requested_mode: str | None) -> bool:
+    if _contains_any(text, _DEMO_TERMS):
+        return True
+    return requested_mode == "demo" and _contains_any(text, _CONFIRM_TERMS)
+
+
 def _infer_legacy_skill(text: str) -> str | None:
     norm = _normalise_text(text)
     legacy_terms = [
@@ -423,10 +457,17 @@ def _resolve_skill_alias(
 
 def _project_root_from_registry(skill_registry: dict) -> Path:
     for info in skill_registry.values():
-        skill_dir = _skill_dir(info)
+        skill_dir = _registry_skill_dir(info)
         if skill_dir:
             return skill_dir.parent.parent
     return Path(__file__).resolve().parent.parent
+
+
+def _registry_skill_dir(info: dict[str, Any]) -> Path | None:
+    script = info.get("script") if isinstance(info, dict) else None
+    if not script:
+        return None
+    return Path(script).parent
 
 
 def _skill_dir(info: dict[str, Any]) -> Path | None:
