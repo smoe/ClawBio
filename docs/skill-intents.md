@@ -14,7 +14,8 @@ Place one JSON file in the skill directory:
 
 If neither file exists, RoboTerri and the Discord bot fall back to the legacy
 skill/mode behavior. Demo mode is only planned when the raw user text explicitly
-asks for a demo, example, synthetic data, or sample data.
+asks for a demo, example, synthetic data, or sample data, or when the user
+confirms an already proposed demo with text such as "yes" or "go ahead".
 
 ## Schema
 

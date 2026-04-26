@@ -38,7 +38,12 @@ _PROJECT_ROOT_FOR_IMPORT = Path(__file__).resolve().parent.parent
 if str(_PROJECT_ROOT_FOR_IMPORT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT_FOR_IMPORT))
 
-from clawbio.skill_intents import load_default_skill_registry, plan_skill_intent
+from clawbio.skill_intents import (
+    load_default_skill_registry,
+    plan_skill_intent,
+    skill_intent_tool_summary,
+    skill_names_for_tool_schema,
+)
 
 # --------------------------------------------------------------------------- #
 # Config
@@ -238,6 +243,10 @@ _voice_enabled: dict[int, bool] = {}
 
 BOT_START_TIME = time.time()
 
+_SKILL_REGISTRY = load_default_skill_registry(CLAWBIO_DIR)
+_SKILL_TOOL_ENUM = skill_names_for_tool_schema(_SKILL_REGISTRY)
+_DESCRIPTOR_TOOL_SUMMARY = skill_intent_tool_summary(_SKILL_REGISTRY)
+
 # --------------------------------------------------------------------------- #
 # Tool definition (OpenAI function-calling format)
 # --------------------------------------------------------------------------- #
@@ -260,21 +269,22 @@ TOOLS = [
                 "clinpgx (gene-drug interaction database lookup via PharmGKB/CPIC), "
                 "gwas (federated variant lookup across 9 genomic databases by rsID), "
                 "profile (unified genomic profile report combining all skill results). "
+                + (f"Descriptor-provided skill intents: {_DESCRIPTOR_TOOL_SUMMARY}. " if _DESCRIPTOR_TOOL_SUMMARY else "")
+                + (
                 "Use mode='demo' to run with built-in demo data. "
                 "Use mode='file' when the user has sent a genetic data file. "
                 "Use skill='auto' to let the orchestrator detect the right skill. "
                 "IMPORTANT: When this tool returns results, relay the output VERBATIM. "
                 "Do not paraphrase, summarise, or rewrite. The output contains exact numerical "
                 "results (IBS scores, percentages, gene-drug interactions) that must be shown unchanged."
+                )
             ),
             "parameters": {
                 "type": "object",
                 "properties": {
                     "skill": {
                         "type": "string",
-                        "enum": ["pharmgx", "equity", "nutrigx", "metagenomics",
-                                 "compare", "drugphoto", "prs", "clinpgx",
-                                 "gwas", "profile", "auto"],
+                        "enum": _SKILL_TOOL_ENUM,
                         "description": (
                             "Which bioinformatics skill to run. Use 'auto' to let "
                             "the orchestrator detect from the file type or query."
@@ -495,59 +505,73 @@ async def execute_clawbio(args: dict) -> str:
     skill_key = args.get("skill", "auto")
     mode = args.get("mode", "demo")
     query = args.get("query", "")
+    raw_user_text = args.get("_raw_user_text") or query or ""
+    skill_registry = _SKILL_REGISTRY
+    preplanned_plan = None
 
     # Auto-routing via orchestrator
     if skill_key == "auto":
-        orch_script = CLAWBIO_DIR / "skills" / "bio-orchestrator" / "orchestrator.py"
-        if not orch_script.exists():
-            return "Error: bio-orchestrator not found."
+        descriptor_plan = plan_skill_intent(
+            user_text=raw_user_text,
+            requested_skill=skill_key,
+            requested_mode=mode,
+            attachments=[],
+            skill_registry=skill_registry,
+            project_root=CLAWBIO_DIR,
+        )
+        if descriptor_plan.intent_id != "legacy_fallback":
+            preplanned_plan = descriptor_plan
+        else:
+            orch_script = CLAWBIO_DIR / "skills" / "bio-orchestrator" / "orchestrator.py"
+            if not orch_script.exists():
+                return "Error: bio-orchestrator not found."
 
-        orch_input = query
-        if mode == "file":
-            for _cid, info in _received_files.items():
-                orch_input = info["path"]
-                break
-        if not orch_input:
-            return "Error: skill='auto' requires either a file or a query to route."
+            orch_input = query
+            if mode == "file":
+                for _cid, info in _received_files.items():
+                    orch_input = info["path"]
+                    break
+            if not orch_input:
+                return "Error: skill='auto' requires either a file or a query to route."
 
-        try:
-            proc = await asyncio.create_subprocess_exec(
-                sys.executable, str(orch_script),
-                "--input", orch_input,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-                cwd=str(orch_script.parent),
-            )
-            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=30)
-            if proc.returncode != 0:
-                return f"Orchestrator error: {stderr.decode()[-500:]}"
-            routing = json.loads(stdout.decode())
-            detected = routing.get("detected_skill", "")
-            orch_to_key = {
-                "pharmgx-reporter": "pharmgx",
-                "equity-scorer": "equity",
-                "nutrigx_advisor": "nutrigx",
-                "claw-metagenomics": "metagenomics",
-                "genome-compare": "compare",
-                "gwas-prs": "prs",
-                "clinpgx": "clinpgx",
-                "gwas-lookup": "gwas",
-                "profile-report": "profile",
-            }
-            skill_key = orch_to_key.get(detected, "")
-            if not skill_key:
-                avail = list(orch_to_key.values())
-                return (
-                    f"Orchestrator detected skill '{detected}' which is not "
-                    f"available via Discord. Available: {avail}"
+            try:
+                proc = await asyncio.create_subprocess_exec(
+                    sys.executable, str(orch_script),
+                    "--input", orch_input,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
+                    cwd=str(orch_script.parent),
                 )
-            logger.info(f"Auto-routed to: {skill_key} (via {routing.get('detection_method', '?')})")
-        except asyncio.TimeoutError:
-            return "Error: orchestrator timed out."
-        except json.JSONDecodeError:
-            return "Error: could not parse orchestrator output."
-        except Exception as e:
-            return f"Error running orchestrator: {e}"
+                stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=30)
+                if proc.returncode != 0:
+                    return f"Orchestrator error: {stderr.decode()[-500:]}"
+                routing = json.loads(stdout.decode())
+                detected = routing.get("detected_skill", "")
+                orch_to_key = {
+                    "pharmgx-reporter": "pharmgx",
+                    "equity-scorer": "equity",
+                    "nutrigx_advisor": "nutrigx",
+                    "claw-metagenomics": "metagenomics",
+                    "genome-compare": "compare",
+                    "gwas-prs": "prs",
+                    "clinpgx": "clinpgx",
+                    "gwas-lookup": "gwas",
+                    "profile-report": "profile",
+                }
+                skill_key = orch_to_key.get(detected, "")
+                if not skill_key:
+                    avail = list(orch_to_key.values())
+                    return (
+                        f"Orchestrator detected skill '{detected}' which is not "
+                        f"available via Discord. Available: {avail}"
+                    )
+                logger.info(f"Auto-routed to: {skill_key} (via {routing.get('detection_method', '?')})")
+            except asyncio.TimeoutError:
+                return "Error: orchestrator timed out."
+            except json.JSONDecodeError:
+                return "Error: could not parse orchestrator output."
+            except Exception as e:
+                return f"Error running orchestrator: {e}"
 
     # Resolve input and profile for file mode
     input_path = None
@@ -572,13 +596,13 @@ async def execute_clawbio(args: dict) -> str:
         if args.get(key):
             attachments.append({key: args[key]})
 
-    skill_registry = load_default_skill_registry(CLAWBIO_DIR)
-    plan = plan_skill_intent(
-        user_text=args.get("_raw_user_text") or query or "",
+    plan = preplanned_plan or plan_skill_intent(
+        user_text=raw_user_text,
         requested_skill=skill_key,
         requested_mode=mode,
         attachments=attachments,
         skill_registry=skill_registry,
+        project_root=CLAWBIO_DIR,
     )
     _audit(
         "skill_intent_plan",
