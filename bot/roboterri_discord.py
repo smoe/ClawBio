@@ -41,10 +41,16 @@ if str(_PROJECT_ROOT_FOR_IMPORT) not in sys.path:
 from clawbio.skill_intents import (
     load_default_skill_registry,
     plan_skill_intent,
+    skill_intent_prompt_guidance,
     skill_intent_tool_summary,
     skill_names_for_tool_schema,
 )
-from bot.tool_loop_utils import execute_tool_calls_safely, synthetic_tool_result_messages
+from bot.tool_loop_utils import (
+    execute_tool_calls_safely,
+    repair_tool_call_history,
+    synthetic_tool_result_messages,
+    tool_error_content,
+)
 
 # --------------------------------------------------------------------------- #
 # Config
@@ -216,7 +222,8 @@ Operational constraints:
 6. DEMO FALLBACK: When a non-admin user asks about pharmacogenomics, nutrigenomics, risk scores, or any skill that needs genetic data but has NOT uploaded a file, do NOT just ask for a file and stop. Instead, offer to run the demo with built-in synthetic data (mode='demo') so they can see the skill in action. Example: "I can run a demo with synthetic data so you can see what the report looks like — shall I go ahead?" If they agree (or if the request is clearly exploratory), run it immediately.
 """
 
-SYSTEM_PROMPT = f"{_soul}\n\n{ROLE_GUARDRAILS}"
+BASE_SYSTEM_PROMPT = f"{_soul}\n\n{ROLE_GUARDRAILS}"
+SYSTEM_PROMPT = BASE_SYSTEM_PROMPT
 
 # --------------------------------------------------------------------------- #
 # State
@@ -247,6 +254,9 @@ BOT_START_TIME = time.time()
 _SKILL_REGISTRY = load_default_skill_registry(CLAWBIO_DIR)
 _SKILL_TOOL_ENUM = skill_names_for_tool_schema(_SKILL_REGISTRY, CLAWBIO_DIR)
 _DESCRIPTOR_TOOL_SUMMARY = skill_intent_tool_summary(_SKILL_REGISTRY, CLAWBIO_DIR)
+_DESCRIPTOR_PROMPT_GUIDANCE = skill_intent_prompt_guidance(_SKILL_REGISTRY, CLAWBIO_DIR)
+if _DESCRIPTOR_PROMPT_GUIDANCE:
+    SYSTEM_PROMPT = f"{BASE_SYSTEM_PROMPT}\n\n{_DESCRIPTOR_PROMPT_GUIDANCE}"
 
 # --------------------------------------------------------------------------- #
 # Tool definition (OpenAI function-calling format)
@@ -510,6 +520,22 @@ async def execute_clawbio(args: dict) -> str:
     skill_registry = _SKILL_REGISTRY
     preplanned_plan = None
 
+    def _error(error_type: str, message: str, **details) -> str:
+        clean_details = {k: v for k, v in details.items() if v is not None}
+        return tool_error_content("clawbio", error_type, message, details=clean_details)
+
+    def _deferred(message: str, **details) -> str:
+        return json.dumps(
+            {
+                "ok": True,
+                "tool": "clawbio",
+                "status": "deferred",
+                "message": message,
+                "details": {k: v for k, v in details.items() if v is not None},
+            },
+            sort_keys=True,
+        )
+
     # Auto-routing via orchestrator
     if skill_key == "auto":
         descriptor_plan = plan_skill_intent(
@@ -525,7 +551,7 @@ async def execute_clawbio(args: dict) -> str:
         else:
             orch_script = CLAWBIO_DIR / "skills" / "bio-orchestrator" / "orchestrator.py"
             if not orch_script.exists():
-                return "Error: bio-orchestrator not found."
+                return _error("orchestrator_missing", "bio-orchestrator not found.")
 
             orch_input = query
             if mode == "file":
@@ -533,7 +559,7 @@ async def execute_clawbio(args: dict) -> str:
                     orch_input = info["path"]
                     break
             if not orch_input:
-                return "Error: skill='auto' requires either a file or a query to route."
+                return _error("missing_input", "skill='auto' requires either a file or a query to route.")
 
             try:
                 proc = await asyncio.create_subprocess_exec(
@@ -545,7 +571,7 @@ async def execute_clawbio(args: dict) -> str:
                 )
                 stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=30)
                 if proc.returncode != 0:
-                    return f"Orchestrator error: {stderr.decode()[-500:]}"
+                    return _error("orchestrator_failed", stderr.decode(errors="replace")[-500:])
                 routing = json.loads(stdout.decode())
                 detected = routing.get("detected_skill", "")
                 orch_to_key = {
@@ -562,17 +588,20 @@ async def execute_clawbio(args: dict) -> str:
                 skill_key = orch_to_key.get(detected, "")
                 if not skill_key:
                     avail = list(orch_to_key.values())
-                    return (
+                    return _error(
+                        "orchestrator_unavailable_skill",
                         f"Orchestrator detected skill '{detected}' which is not "
-                        f"available via Discord. Available: {avail}"
+                        f"available via Discord. Available: {avail}",
+                        detected_skill=detected,
+                        available=avail,
                     )
                 logger.info(f"Auto-routed to: {skill_key} (via {routing.get('detection_method', '?')})")
             except asyncio.TimeoutError:
-                return "Error: orchestrator timed out."
+                return _error("orchestrator_timeout", "orchestrator timed out.")
             except json.JSONDecodeError:
-                return "Error: could not parse orchestrator output."
+                return _error("orchestrator_bad_json", "could not parse orchestrator output.")
             except Exception as e:
-                return f"Error running orchestrator: {e}"
+                return _error("orchestrator_exception", f"{type(e).__name__}: {e}")
 
     # Resolve input and profile for file mode
     input_path = None
@@ -588,7 +617,7 @@ async def execute_clawbio(args: dict) -> str:
             input_path = str(OWNER_GENOME)
             logger.info(f"No file uploaded — using owner genome: {OWNER_GENOME.name}")
         else:
-            return "Error: no file received. Send a genetic data file first, then run the skill."
+            return _error("missing_input", "no file received. Send a genetic data file first, then run the skill.")
 
     attachments = []
     if input_path or profile_path:
@@ -620,9 +649,20 @@ async def execute_clawbio(args: dict) -> str:
         plan.skill, plan.intent_id, plan.status, plan.reason,
     )
     if plan.status == "needs_confirmation":
-        return f"Confirmation required before running {plan.skill}: {plan.reason}"
+        return _deferred(
+            f"Confirmation required before running {plan.skill}: {plan.reason}",
+            selected_skill=plan.skill,
+            selected_intent=plan.intent_id,
+            matched_route=plan.matched_route,
+        )
     if plan.status == "needs_input" or not plan.executions:
-        return plan.reason or "I need an input file or a clearer skill request before running ClawBio."
+        return _error(
+            plan.status or "intent_not_planned",
+            plan.reason or "I need an input file or a clearer skill request before running ClawBio.",
+            selected_skill=plan.skill,
+            selected_intent=plan.intent_id,
+            matched_route=plan.matched_route,
+        )
 
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
     stdout_parts = []
@@ -664,15 +704,20 @@ async def execute_clawbio(args: dict) -> str:
             stdout_str = stdout_bytes.decode(errors="replace")
             stderr_str = stderr_bytes.decode(errors="replace")
         except asyncio.TimeoutError:
-            return f"{run_skill} timed out after 120 seconds."
+            return _error("skill_timeout", f"{run_skill} timed out after 120 seconds.", selected_skill=run_skill)
         except Exception:
             import traceback as _tb
-            return f"{run_skill} crashed:\n{_tb.format_exc()[-1500:]}"
+            return _error("skill_exception", f"{run_skill} crashed:\n{_tb.format_exc()[-1500:]}", selected_skill=run_skill)
 
         stdout_parts.append(stdout_str)
         if proc.returncode != 0:
             err = stderr_str[-1500:] if stderr_str else stdout_str[-1500:] if stdout_str else "unknown error"
-            return f"{run_skill} failed (exit {proc.returncode}):\n{err}"
+            return _error(
+                "skill_nonzero_exit",
+                f"{run_skill} failed (exit {proc.returncode}):\n{err}",
+                selected_skill=run_skill,
+                returncode=proc.returncode,
+            )
 
     skill_key = executed_skills[-1] if executed_skills else skill_key
     stdout_str = "\n".join(part for part in stdout_parts if part)
@@ -952,26 +997,22 @@ async def llm_tool_loop(channel_id: int, user_content: str | list) -> str:
     if len(history) > MAX_HISTORY:
         history[:] = history[-MAX_HISTORY:]
 
-    # Sanitise: strip orphaned tool messages that lack a preceding
-    # assistant message with tool_calls (prevents API 400 errors).
-    sanitised: list[dict] = []
-    for msg in history:
-        if msg.get("role") == "tool":
-            # Only keep if previous message is assistant with tool_calls
-            if sanitised and sanitised[-1].get("role") == "assistant":
-                if sanitised[-1].get("tool_calls"):
-                    sanitised.append(msg)
-                    continue
-            logger.warning("Dropped orphaned tool message from history")
-            _audit("history_sanitised", channel_id=channel_id,
-                   detail="orphaned_tool_message_dropped")
-            continue
-        sanitised.append(msg)
-    history[:] = sanitised
+    repair_tool_call_history(
+        history,
+        audit=_audit,
+        audit_context={"channel_id": channel_id},
+        logger=logger,
+    )
 
     last_message = None
     seen_tool_call_signatures: set[str] = set()
     for _iteration in range(MAX_TOOL_ITERATIONS):
+        repair_tool_call_history(
+            history,
+            audit=_audit,
+            audit_context={"channel_id": channel_id},
+            logger=logger,
+        )
         try:
             response = await llm.chat.completions.create(
                 model=CLAWBIO_MODEL,
@@ -1027,9 +1068,20 @@ async def llm_tool_loop(channel_id: int, user_content: str | list) -> str:
             )
             tool_messages = synthetic_tool_result_messages(
                 last_message.tool_calls,
-                f"Tool execution interrupted before completion: {type(tool_loop_err).__name__}: {tool_loop_err}",
+                tool_error_content(
+                    "tool_loop",
+                    "exception",
+                    f"{type(tool_loop_err).__name__}: {tool_loop_err}",
+                    retryable=True,
+                ),
             )
         history.extend(tool_messages)
+        repair_tool_call_history(
+            history,
+            audit=_audit,
+            audit_context={"channel_id": channel_id},
+            logger=logger,
+        )
 
     return last_message.content if last_message and last_message.content else "(max tool iterations reached)"
 
