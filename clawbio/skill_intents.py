@@ -225,14 +225,58 @@ def skill_intent_tool_summary(
         if not _descriptor_has_executable_route(descriptor, executable_registry):
             continue
         skill = descriptor.get("skill") or descriptor.get("_registry_alias")
+        aliases = [
+            str(alias)
+            for alias in _as_string_list(descriptor.get("aliases"))
+            if alias.strip()
+        ]
         intents = [
-            str(route.get("intent_id"))
+            _route_summary_for_tool(route)
             for route in descriptor.get("routes", [])
             if isinstance(route, dict) and route.get("intent_id")
         ]
         if intents:
-            summaries.append(f"{skill} intents: {', '.join(intents)}")
+            alias_text = f" aliases: {', '.join(aliases)};" if aliases else ""
+            summaries.append(f"{skill}{alias_text} intents: {', '.join(intents)}")
     return "; ".join(summaries)
+
+
+def skill_intent_prompt_guidance(
+    skill_registry: dict,
+    project_root: str | Path | None = None,
+) -> str:
+    """System-prompt guidance for descriptor-backed local ClawBio skills."""
+
+    summary = skill_intent_tool_summary(skill_registry, project_root)
+    if not summary:
+        return ""
+    return (
+        "Descriptor-provided ClawBio skill intents are local runtime capabilities: "
+        f"{summary}. When the user names one of these skills or aliases, or asks a "
+        "matching route question such as version, status, runtime, installed version, "
+        "a guide, isoforms, 2D gel, or another descriptor-specific analysis, call the "
+        "clawbio tool before answering. If the same name may also refer to public or "
+        "upstream software, keep those concepts separate: label public/latest upstream "
+        "information as such, and label clawbio tool output as the locally installed "
+        "ClawBio runtime or rewrite. Do not substitute public latest-version knowledge "
+        "for local installed runtime details."
+    )
+
+
+def _route_summary_for_tool(route: dict[str, Any]) -> str:
+    intent_id = str(route.get("intent_id"))
+    raw_terms = [
+        *_as_string_list(route.get("trigger_terms")),
+        *_as_string_list(route.get("aliases")),
+    ]
+    terms = [
+        term
+        for term in raw_terms
+        if term.strip()
+    ][:4]
+    if not terms:
+        return intent_id
+    return f"{intent_id} ({', '.join(terms)})"
 
 
 def _read_descriptor(skill_dir: Path, alias: str) -> dict[str, Any] | None:
@@ -643,7 +687,11 @@ def _score_descriptor_routes(
     matches: list[tuple[dict[str, Any], dict[str, Any], int, list[str]]] = []
     for descriptor in descriptors:
         descriptor_skill = str(descriptor.get("skill") or descriptor.get("_registry_alias"))
-        skill_aliases = [descriptor_skill, descriptor.get("_registry_alias"), *descriptor.get("aliases", [])]
+        skill_aliases = [
+            descriptor_skill,
+            descriptor.get("_registry_alias"),
+            *_as_string_list(descriptor.get("aliases")),
+        ]
         skill_hint = requested_skill in skill_aliases if requested_skill else False
         for route in descriptor.get("routes", []):
             if not isinstance(route, dict):
@@ -652,11 +700,11 @@ def _score_descriptor_routes(
             if demo_policy == "only_when_explicit" and not explicit_demo:
                 continue
             terms = [
-                *route.get("trigger_terms", []),
-                *route.get("aliases", []),
+                *_as_string_list(route.get("trigger_terms")),
+                *_as_string_list(route.get("aliases")),
             ]
             matched_terms = [term for term in terms if _term_matches(norm, str(term))]
-            score = len(matched_terms) * 4
+            score = sum(_matched_term_score(str(term)) for term in matched_terms)
             if skill_hint:
                 score += 3
             if _contains_any(norm, [str(term).lower() for term in skill_aliases if term]):
@@ -711,7 +759,7 @@ def _resolve_skill_alias(
     if requested_skill in skill_registry:
         return requested_skill
     for descriptor in descriptors:
-        aliases = [descriptor.get("skill"), descriptor.get("_registry_alias"), *descriptor.get("aliases", [])]
+        aliases = [descriptor.get("skill"), descriptor.get("_registry_alias"), *_as_string_list(descriptor.get("aliases"))]
         if requested_skill in aliases:
             return str(descriptor.get("skill") or descriptor.get("_registry_alias"))
     return requested_skill
@@ -760,6 +808,14 @@ def _safe_argv_list(value: Any) -> list[str]:
     return safe
 
 
+def _as_string_list(value: Any) -> list[str]:
+    if value is None:
+        return []
+    if isinstance(value, list):
+        return [str(item) for item in value]
+    return [str(value)]
+
+
 def _attachment_paths(attachments: list) -> tuple[str | None, str | None]:
     input_path = None
     profile_path = None
@@ -789,6 +845,14 @@ def _term_matches(normalised_text: str, term: str) -> bool:
     if " " in term_norm:
         return term_norm in normalised_text
     return re.search(rf"\b{re.escape(term_norm)}\b", normalised_text) is not None
+
+
+def _matched_term_score(term: str) -> int:
+    term_norm = _normalise_text(term)
+    if not term_norm:
+        return 0
+    words = len(term_norm.split())
+    return 4 + min(words - 1, 3) + min(len(term_norm) // 12, 3)
 
 
 def _contains_any(text: str, terms: tuple[str, ...] | list[str]) -> bool:

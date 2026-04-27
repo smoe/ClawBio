@@ -3,6 +3,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from bot.tool_loop_utils import execute_tool_calls_safely
+from bot.tool_loop_utils import repair_tool_call_history
 from bot.tool_loop_utils import synthetic_tool_result_messages
 from clawbio.skill_intents import (
     SCHEMA,
@@ -430,6 +431,143 @@ def test_parameterized_gentle_request_template_extracts_slots(tmp_path: Path):
     assert "--input" in execution.argv
 
 
+def test_gentle_isoforms_guide_routes_to_shell_request(tmp_path: Path):
+    skill_dir = tmp_path / "skills" / "gentle-cloning"
+    skill_dir.mkdir(parents=True)
+    script = skill_dir / "gentle_cloning.py"
+    script.write_text("print('gentle')\n", encoding="utf-8")
+    (skill_dir / "INTENTS.json").write_text(
+        json.dumps(
+            {
+                "schema": SCHEMA,
+                "skill": "gentle-cloning",
+                "entrypoint": "gentle_cloning.py",
+                "aliases": ["GENtle", "gentle"],
+                "routes": [
+                    {
+                        "intent_id": "skill_info",
+                        "description": "General skill information.",
+                        "trigger_terms": ["guide"],
+                        "plan": [
+                            {
+                                "kind": "skill_run",
+                                "skill": "gentle-cloning",
+                                "input_template": {"mode": "skill-info"},
+                            }
+                        ],
+                    },
+                    {
+                        "intent_id": "isoforms_guide",
+                        "description": "Show a gene isoforms guide.",
+                        "trigger_terms": ["isoforms guide", "isoforms", "guide"],
+                        "plan": [
+                            {
+                                "kind": "skill_run",
+                                "skill": "gentle-cloning",
+                                "input_template": {
+                                    "mode": "shell",
+                                    "shell_line": (
+                                        "services guide --channel telegram --section isoforms "
+                                        "--gene {gene_symbol}"
+                                    ),
+                                },
+                                "slots": {
+                                    "gene_symbol": {"pattern": "\\b([A-Z][A-Z0-9]{2,15})\\b"},
+                                },
+                            }
+                        ],
+                    },
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    registry = augment_skill_registry_with_descriptors({}, tmp_path)
+
+    plan = plan_skill_intent(
+        user_text="Show me the GENtle isoforms guide for BACH2",
+        requested_skill="gentle-cloning",
+        requested_mode="demo",
+        attachments=None,
+        skill_registry=registry,
+        project_root=tmp_path,
+    )
+
+    assert plan.status == "planned"
+    assert plan.intent_id == "isoforms_guide"
+    assert plan.executions[0].input_payload == {
+        "mode": "shell",
+        "shell_line": "services guide --channel telegram --section isoforms --gene BACH2",
+    }
+
+
+def test_gentle_isoforms_2d_gel_routes_to_parameterized_request(tmp_path: Path):
+    skill_dir = tmp_path / "skills" / "gentle-cloning"
+    skill_dir.mkdir(parents=True)
+    script = skill_dir / "gentle_cloning.py"
+    script.write_text("print('gentle')\n", encoding="utf-8")
+    (skill_dir / "INTENTS.json").write_text(
+        json.dumps(
+            {
+                "schema": SCHEMA,
+                "skill": "gentle-cloning",
+                "entrypoint": "gentle_cloning.py",
+                "aliases": ["GENtle", "gentle"],
+                "routes": [
+                    {
+                        "intent_id": "protein_2d_gel",
+                        "description": "Generate a 2D protein gel for gene isoforms.",
+                        "trigger_terms": ["2d gel", "2d protein gel", "isoforms"],
+                        "plan": [
+                            {
+                                "kind": "skill_run",
+                                "skill": "gentle-cloning",
+                                "input_template": {
+                                    "mode": "gene-protein-2d-gel",
+                                    "source": "{source}",
+                                    "species": "{species}",
+                                    "gene_symbol": "{gene_symbol}",
+                                    "state_path": ".gentle_state.json",
+                                    "ladders": ["Protein Ladder 10-100 kDa"],
+                                    "timeout_secs": 600,
+                                },
+                                "slots": {
+                                    "gene_symbol": {"pattern": "\\b([A-Z][A-Z0-9]{2,15})\\b"},
+                                    "species": {"default": "homo_sapiens"},
+                                    "source": {"default": "ensembl"},
+                                },
+                            }
+                        ],
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    registry = augment_skill_registry_with_descriptors({}, tmp_path)
+
+    plan = plan_skill_intent(
+        user_text="Show me a 2D gel for isoforms of the gene BACH2",
+        requested_skill="gentle-cloning",
+        requested_mode=None,
+        attachments=None,
+        skill_registry=registry,
+        project_root=tmp_path,
+    )
+
+    assert plan.status == "planned"
+    assert plan.intent_id == "protein_2d_gel"
+    assert plan.executions[0].input_payload == {
+        "mode": "gene-protein-2d-gel",
+        "source": "ensembl",
+        "species": "homo_sapiens",
+        "gene_symbol": "BACH2",
+        "state_path": ".gentle_state.json",
+        "ladders": ["Protein Ladder 10-100 kDa"],
+        "timeout_secs": 600,
+    }
+
+
 def test_tool_call_helper_returns_message_for_failing_executor():
     async def boom(_args):
         raise RuntimeError("kaboom")
@@ -450,13 +588,13 @@ def test_tool_call_helper_returns_message_for_failing_executor():
         )
     )
 
-    assert messages == [
-        {
-            "role": "tool",
-            "tool_call_id": "call-1",
-            "content": "Error executing clawbio: RuntimeError: kaboom",
-        }
-    ]
+    assert messages[0]["role"] == "tool"
+    assert messages[0]["tool_call_id"] == "call-1"
+    payload = json.loads(messages[0]["content"])
+    assert payload["ok"] is False
+    assert payload["tool"] == "clawbio"
+    assert payload["error"]["type"] == "exception"
+    assert payload["error"]["message"] == "RuntimeError: kaboom"
 
 
 def test_tool_call_helper_returns_one_message_per_tool_call():
@@ -473,7 +611,9 @@ def test_tool_call_helper_returns_one_message_per_tool_call():
     messages = asyncio.run(execute_tool_calls_safely(tool_calls, {"known": ok}))
 
     assert [message["tool_call_id"] for message in messages] == ["call-1", "call-2"]
-    assert [message["content"] for message in messages] == ["ok", "Unknown tool: missing"]
+    assert messages[0]["content"] == "ok"
+    missing_payload = json.loads(messages[1]["content"])
+    assert missing_payload["error"]["type"] == "unknown_tool"
 
 
 def test_tool_call_helper_converts_cancellation_to_tool_message():
@@ -486,11 +626,43 @@ def test_tool_call_helper_converts_cancellation_to_tool_message():
 
     messages = asyncio.run(execute_tool_calls_safely([tool_call], {"known": cancelled}))
 
+    assert messages[0]["role"] == "tool"
+    assert messages[0]["tool_call_id"] == "call-cancel"
+    payload = json.loads(messages[0]["content"])
+    assert payload["error"]["type"] == "cancelled"
+
+
+def test_tool_call_helper_returns_error_for_malformed_arguments():
+    async def ok(_args):
+        return "ok"
+
+    tool_call = SimpleNamespace(id="call-bad", function=SimpleNamespace(name="known", arguments="{bad json"))
+
+    import asyncio
+
+    messages = asyncio.run(execute_tool_calls_safely([tool_call], {"known": ok}))
+
+    assert messages[0]["role"] == "tool"
+    assert messages[0]["tool_call_id"] == "call-bad"
+    payload = json.loads(messages[0]["content"])
+    assert payload["error"]["type"] == "malformed_arguments"
+
+
+def test_deferred_action_returns_matching_tool_message():
+    async def deferred(_args):
+        return json.dumps({"ok": True, "status": "deferred", "reason": "pending user confirmation"})
+
+    tool_call = SimpleNamespace(id="call-defer", function=SimpleNamespace(name="known", arguments="{}"))
+
+    import asyncio
+
+    messages = asyncio.run(execute_tool_calls_safely([tool_call], {"known": deferred}))
+
     assert messages == [
         {
             "role": "tool",
-            "tool_call_id": "call-cancel",
-            "content": "Tool execution cancelled before completion: known",
+            "tool_call_id": "call-defer",
+            "content": json.dumps({"ok": True, "status": "deferred", "reason": "pending user confirmation"}),
         }
     ]
 
@@ -541,3 +713,29 @@ def test_duplicate_tool_call_is_not_executed_twice():
             "content": "Duplicate tool call suppressed; the same tool request was already handled in this turn.",
         }
     ]
+
+
+def test_bad_session_history_is_repaired_with_missing_tool_result():
+    history = [
+        {"role": "user", "content": "run gentle"},
+        {
+            "role": "assistant",
+            "content": "",
+            "tool_calls": [
+                {
+                    "id": "call-missing",
+                    "type": "function",
+                    "function": {"name": "clawbio", "arguments": '{"skill":"gentle-cloning"}'},
+                }
+            ],
+        },
+        {"role": "user", "content": "hello again"},
+    ]
+
+    repaired = repair_tool_call_history(history)
+
+    assert repaired[2]["role"] == "tool"
+    assert repaired[2]["tool_call_id"] == "call-missing"
+    assert repaired[3] == {"role": "user", "content": "hello again"}
+    payload = json.loads(repaired[2]["content"])
+    assert payload["error"]["type"] == "missing_tool_result_repaired"

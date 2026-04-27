@@ -84,8 +84,22 @@ Plan step fields:
 - `output`: optional path, resolved relative to the skill directory
 - `confirmation`: optional object, for example `{"required": true, "reason": "Writes cached backend state."}`
 
-The descriptor is data only. It cannot run arbitrary code, define shell
-commands, or call chat-platform APIs.
+The descriptor is data only. The planner never runs arbitrary code, invokes a
+shell, or calls chat-platform APIs from metadata. A descriptor may still create
+ordinary request JSON fields such as `shell_line` for a registered skill that
+validates and interprets those fields itself.
+
+## Chat Adapter Behavior
+
+Executable descriptor-backed skills are added to the chat tool schema together
+with their aliases, intent ids, and leading trigger terms. When a user names a
+descriptor skill or alias and asks a matching question, such as a version,
+status, runtime, guide, isoforms, 2D gel, or descriptor-specific analysis
+request, RoboTerri and the Discord bot should call `clawbio` before answering.
+If the same name also refers to public upstream software, answers should keep
+the two meanings separate: public/latest upstream information is not the same
+as the locally installed ClawBio runtime or rewrite reported by the descriptor
+route.
 
 Parameterized request example:
 
@@ -134,3 +148,40 @@ mutating or expensive steps with `confirmation.required: true`.
 For parameterized protein-gel requests, use an `input_template` with slots for
 `gene_symbol`, `species`, and `source`, as shown above. The generated temporary
 JSON request is passed to `gentle-cloning` via `--input`.
+
+GENtle can route Telegram guide requests with a shell request payload:
+
+```json
+{
+  "intent_id": "isoforms_guide",
+  "description": "Show a GENtle isoforms guide for a gene.",
+  "trigger_terms": ["isoforms guide", "isoforms", "guide"],
+  "plan": [
+    {
+      "kind": "skill_run",
+      "skill": "gentle-cloning",
+      "input_template": {
+        "mode": "shell",
+        "shell_line": "services guide --channel telegram --section isoforms --gene {gene_symbol}"
+      },
+      "slots": {
+        "gene_symbol": {"pattern": "\\b([A-Z][A-Z0-9]{2,15})\\b"}
+      }
+    }
+  ]
+}
+```
+
+And a 2D protein gel request with this payload shape:
+
+```json
+{
+  "mode": "gene-protein-2d-gel",
+  "source": "ensembl",
+  "species": "homo_sapiens",
+  "gene_symbol": "{gene_symbol}",
+  "state_path": ".gentle_state.json",
+  "ladders": ["Protein Ladder 10-100 kDa"],
+  "timeout_secs": 600
+}
+```
