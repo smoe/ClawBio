@@ -324,6 +324,8 @@ def detect_skill_with_hint_from_query(query: str) -> tuple[str | None, str]:
     wants_downstream = any(term in query_lower for term in SCRNA_DOWNSTREAM_TERMS)
     has_latent_artifact = any(term in query_lower for term in SCRNA_LATENT_ARTIFACT_TERMS)
 
+    # Chain-aware scRNA routing favors explicit embedding requests unless the
+    # user is clearly asking for downstream analysis on an existing latent artifact.
     if has_latent_artifact and wants_downstream:
         return (
             "scrna-orchestrator",
