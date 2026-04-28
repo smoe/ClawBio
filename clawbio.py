@@ -513,6 +513,13 @@ SKILLS = {
         },
         "accepts_genotypes": False,
     },
+    "gentle-cloning": {
+        "script": SKILLS_DIR / "gentle-cloning" / "gentle_cloning.py",
+        "demo_args": ["--demo"],
+        "description": "GENtle wrapper for structured local sequence/cloning requests",
+        "allowed_extra_flags": {"--gentle-cli"},
+        "accepts_genotypes": False,
+    },
     "protocols-io": {
         "script": SKILLS_DIR / "protocols-io" / "protocols_io.py",
         "demo_args": ["--demo"],
@@ -664,6 +671,67 @@ def upload_profile(
 # --------------------------------------------------------------------------- #
 # run_skill
 # --------------------------------------------------------------------------- #
+
+
+def _load_structured_skill_result(out_dir: Path | None) -> tuple[dict | None, Path | None]:
+    """Load a skill's result.json envelope when present and valid."""
+    if out_dir is None:
+        return None, None
+    result_json_path = out_dir / "result.json"
+    if not result_json_path.exists():
+        return None, None
+    try:
+        payload = json.loads(result_json_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None, result_json_path
+    if not isinstance(payload, dict):
+        return None, result_json_path
+    return payload, result_json_path
+
+
+def _load_report_markdown(out_dir: Path | None) -> str | None:
+    """Read the primary markdown report from an output bundle when present."""
+    if out_dir is None or not out_dir.exists():
+        return None
+    for pattern in ("report.md", "*_report.md", "*.md"):
+        for md_file in sorted(out_dir.glob(pattern)):
+            if md_file.name.startswith("."):
+                continue
+            try:
+                return md_file.read_text(encoding="utf-8")
+            except OSError:
+                continue
+    return None
+
+
+def _promote_structured_result_fields(result: dict, out_dir: Path | None) -> None:
+    """Attach parsed result.json fields to the top-level run result."""
+    payload, result_json_path = _load_structured_skill_result(out_dir)
+    if payload is not None:
+        result["skill_result_json"] = payload
+    if result_json_path is not None:
+        result["result_json_path"] = str(result_json_path)
+
+    if isinstance(payload, dict):
+        # Structured result fields form the small skill-to-ClawBio display and
+        # action contract:
+        # - chat_summary_lines: concise, skill-authored text for chat UIs
+        # - preferred_artifacts: generated files the UI should surface first
+        # - suggested_actions: deterministic next-step requests to offer later
+        # - report_md: full markdown report text embedded in result.json
+        for field in (
+            "chat_summary_lines",
+            "preferred_artifacts",
+            "suggested_actions",
+            "report_md",
+        ):
+            if field in payload:
+                result[field] = payload[field]
+
+    if "report_md" not in result:
+        report_md = _load_report_markdown(out_dir)
+        if report_md is not None:
+            result["report_md"] = report_md
 
 
 def run_skill(
@@ -848,6 +916,9 @@ def run_skill(
         "duration_seconds": duration,
     }
 
+    if result["success"]:
+        _promote_structured_result_fields(result, out_dir)
+
     # If profile was used, store the result back into it
     if profile_path and result["success"] and out_dir:
         _store_result_in_profile(profile_path, skill_name, out_dir)
@@ -1013,6 +1084,7 @@ def main():
     run_parser.add_argument("--gene", default=None, help="Gene symbol for ClinPGx skill")
     run_parser.add_argument("--genes", default=None, help="Comma-separated gene symbols for ClinPGx")
     run_parser.add_argument("--rsid", default=None, help="rsID for GWAS lookup skill (e.g. rs3798220)")
+    run_parser.add_argument("--gentle-cli", default=None, help="Explicit command used to invoke gentle_cli")
     run_parser.add_argument("--skip", default=None, help="Comma-separated API names to skip (gwas-lookup skill)")
     run_parser.add_argument("--query", default=None, help="Inline SQL query for bigquery skill")
     run_parser.add_argument("--location", default=None, help="BigQuery location (e.g. US, EU)")
@@ -1250,6 +1322,8 @@ def main():
             extra.extend(["--genes", args.genes])
         if getattr(args, "rsid", None):
             extra.extend(["--rsid", args.rsid])
+        if getattr(args, "gentle_cli", None):
+            extra.extend(["--gentle-cli", args.gentle_cli])
         if getattr(args, "skip", None):
             extra.extend(["--skip", args.skip])
         if getattr(args, "query", None):
