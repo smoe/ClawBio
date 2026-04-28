@@ -2,21 +2,19 @@
 
 ![ClawBio Logo](../img/clawbio-logo.jpeg)
 
-**Use this brief to explain ClawBio to collaborators, investors, workshop organisers, and AI agents.**
+**Use this brief to explain ClawBio to collaborators, researchers, workshop organisers, and funders. It can also serve as a quick orientation document for AI agents working from the repository docs.**
 
 ---
 
 ## What is ClawBio?
 
-ClawBio is a bioinformatics-native AI agent skill library built for local-first, reproducible genomic analysis. It packages domain methods as composable skills that an agent can route, execute, and report on without sending biological data to third-party cloud services.
+ClawBio is a bioinformatics skill library for local, reproducible genomic analysis. It packages domain methods as composable skills that an agent can route, execute, and report on without sending biological data to third-party cloud services.
 
-At a high level, ClawBio turns tasks such as pharmacogenomics, GWAS lookup, PRS calculation, UK Biobank exploration, fine-mapping, and sequencing analysis into installable, documented workflows with clear inputs, outputs, and reproducibility artifacts.
+At a high level, ClawBio provides documented workflows for pharmacogenomics, GWAS lookup, PRS calculation, UK Biobank exploration, fine-mapping, and sequencing analysis, with clear inputs, outputs, and reproducibility artifacts.
 
 ## How It Relates to OpenClaw
 
-ClawBio is built on [OpenClaw](https://github.com/OpenClaw/OpenClaw), an agent framework for persistent, tool-using AI systems. OpenClaw provides the agent runtime and skill model; ClawBio provides the bioinformatics layer: domain-specific skills, safety constraints, demo data, reproducibility conventions, and agent-facing documentation.
-
-OpenClaw is the substrate. ClawBio is the specialised bioinformatics skill library on top of it.
+ClawBio is built on [OpenClaw](https://github.com/OpenClaw/OpenClaw), an agent framework for persistent, tool-using AI systems. OpenClaw provides the runtime and skill model; ClawBio adds the bioinformatics layer: domain-specific skills, safety constraints, demo data, reproducibility conventions, and project documentation.
 
 ## Why It Matters
 
@@ -36,14 +34,14 @@ As documented in `README.md`, ClawBio is currently presented as:
 - **55 skills** in the broader platform framing
 - **8,000+ Galaxy tools**
 - **1,401 tests + benchmark validation**
-- a local-first, privacy-focused, reproducible, agent-native bioinformatics stack
+- a local-first bioinformatics stack with privacy and reproducibility as core constraints
 
 The current public skills table in `README.md` lists **43 named skills**, comprising:
 
 - **37 MVP skills**
 - **6 planned skills**
 
-This is a substantial expansion from the older brief, which still described the project as having only 7 production skills and 6 planned skills.
+This is a substantial expansion from the older brief, which described the project as having 7 production skills and 6 planned skills.
 
 ## How ClawBio Works
 
@@ -125,13 +123,13 @@ The current public skill inventory in `README.md` spans personal genomics, popul
 
 - introduced `llms.txt`, `AGENTS.md`, and machine-readable `skills/catalog.json`
 - standardised SKILL.md files and upgraded the skill template
-- made ClawBio substantially easier for AI agents and contributors to discover and extend
+- added project metadata and documentation that make the repository easier to navigate and extend
 
 ### v0.4.0 — Galaxy Integration
 
 - added Galaxy Bridge for natural-language discovery and execution across 8,000+ Galaxy bioinformatics tools
 - shipped bundled Galaxy catalog data and curated tool profiles
-- expanded the platform from a pure skill library into a broader orchestration surface for external bioinformatics tooling
+- broadened the project's scope by connecting ClawBio skills to external bioinformatics tooling through Galaxy
 
 ### v0.5.0 — Validation & Benchmark Infrastructure
 
@@ -143,28 +141,28 @@ The current public skill inventory in `README.md` spans personal genomics, popul
 
 ### Additional Strategic Milestones
 
-- **Corpas 30x WGS reference genome** added as a first-class project resource for demos, tutorials, and benchmarking
-- **External audit** by Sergey Kornilov / Biostochastics captured in `REMEDIATION-PLAN.md`
+- **Corpas 30x WGS reference genome** added as a project resource for demos, tutorials, and benchmarking
+- **External audit** by Sergey Kornilov / Biostochastics documented in `REMEDIATION-PLAN.md`
 - **UK AI Agent Hackathon 2026 Winner**
 - **Bioinformatics Application Note submitted**
-- project visibility at this milestone included **579 GitHub stars** and **108 forks**, as documented in the v0.5.0 changelog entry
+- as of **29 April 2026**, the repository showed **767 GitHub stars** and **154 forks**
 
 ## Why ClawBio Is Different
 
-ClawBio is not just “an LLM that writes bioinformatics code.” Its differentiation is architectural:
+ClawBio differs from ad hoc LLM-assisted bioinformatics workflows in a few practical ways:
 
-- **local-first**: data stays on the researcher's machine
-- **specification-first**: domain logic lives in `SKILL.md`, not only in prompts or model weights
-- **reproducible**: analyses produce reusable artifacts, not just chat output
-- **agent-native**: the repo includes documentation and structure that both humans and agents can use directly
-- **modular**: skills can be developed, tested, and improved independently
+- **Local execution**: data stays on the researcher's machine unless a workflow explicitly uses an external source.
+- **Documented methods**: domain logic is recorded in `SKILL.md`, together with implementation details and operating constraints.
+- **Reproducible outputs**: analyses produce reusable artifacts, not just chat responses.
+- **Modular structure**: skills can be developed, tested, and improved independently.
+- **Readable project metadata**: the repository includes documentation and machine-readable indexes that help both contributors and software agents navigate the project.
 
 ## Who This Is For
 
 - **Researchers** who want local, inspectable analyses instead of opaque cloud workflows
 - **Tool builders** who want to package methods as reusable skills
 - **Collaborators and funders** who need a concise picture of project maturity and trajectory
-- **AI agents** that need explicit project structure, capabilities, and safe execution patterns
+- **AI agents and automation tools** that need explicit project structure, capabilities, and execution guidance
 
 ## Historical Notes
 
