@@ -125,6 +125,7 @@
   <section>
     <div class="section-inner">
       <div class="meta-grid">
+        <!-- BENCH_META_START -->
         <div class="meta-card">
           <div class="meta-label">Last Run</div>
           <div class="meta-value">2026-05-03</div>
@@ -139,15 +140,18 @@
         </div>
         <div class="meta-card">
           <div class="meta-label">ClawBio Commit</div>
-          <div class="meta-value"><a href="https://github.com/ClawBio/ClawBio/commit/925b89a" target="_blank"><code>925b89a</code></a></div>
+          <div class="meta-value"><a href="https://github.com/ClawBio/ClawBio/commit/7820473" target="_blank"><code>7820473</code></a></div>
         </div>
+        <!-- BENCH_META_END -->
       </div>
 
       <div class="summary-bar">
+        <!-- BENCH_SUMMARY_START -->
         <div>
-          <div class="summary-headline"><span class="pass">149</span> / 162 tests passing <span style="color:var(--text-muted);font-weight:600;">(92.0%)</span></div>
-          <div class="summary-rest">10 skills audited across 3 dimensions: safety, correctness, honesty. Up from 80 / 140 (57.1%) at the original 2026-04-05 audit. One harness (fine-mapping, 21 tests) currently shows infrastructure errors and is excluded from the rate.</div>
+          <div class="summary-headline"><span class="pass">168</span> / 182 tests passing <span style="color:var(--text-muted);font-weight:600;">(92.3%)</span></div>
+          <div class="summary-rest">10 skills audited across 3 dimensions: safety, correctness, honesty. Up from 80 / 140 (57.1%) at the original 2026-04-05 audit.</div>
         </div>
+        <!-- BENCH_SUMMARY_END -->
       </div>
 
       <div class="table-wrap">
@@ -162,25 +166,26 @@
             </tr>
           </thead>
           <tbody>
+            <!-- BENCH_TABLE_START -->
+            <tr>
+              <td><a class="skill-link" href="https://github.com/ClawBio/ClawBio/tree/main/skills/claw-metagenomics" target="_blank">claw-metagenomics</a></td>
+              <td>7 / 7</td>
+              <td><div class="rate-cell" style="color:var(--accent);">100.0%</div><span class="rate-bar-wrap"><span class="rate-bar" style="width:100.0%;background:var(--accent);"></span></span></td>
+              <td><span class="finding-tag">none</span></td>
+              <td><span class="pill-status status-clear">Clear</span></td>
+            </tr>
             <tr>
               <td><a class="skill-link" href="https://github.com/ClawBio/ClawBio/tree/main/skills/equity-scorer" target="_blank">equity-scorer</a></td>
               <td>15 / 15</td>
-              <td><div class="rate-cell" style="color:var(--accent);">100.0%</div><span class="rate-bar-wrap"><span class="rate-bar" style="width:100%;background:var(--accent);"></span></span></td>
-              <td><span class="finding-tag">fst_correct</span><span class="finding-tag">heim_bounded</span><span class="finding-tag">edge_handled</span></td>
+              <td><div class="rate-cell" style="color:var(--accent);">100.0%</div><span class="rate-bar-wrap"><span class="rate-bar" style="width:100.0%;background:var(--accent);"></span></span></td>
+              <td><span class="finding-tag">none</span></td>
               <td><span class="pill-status status-clear">Clear</span></td>
             </tr>
             <tr>
               <td><a class="skill-link" href="https://github.com/ClawBio/ClawBio/tree/main/skills/nutrigx-advisor" target="_blank">nutrigx-advisor</a></td>
               <td>10 / 10</td>
-              <td><div class="rate-cell" style="color:var(--accent);">100.0%</div><span class="rate-bar-wrap"><span class="rate-bar" style="width:100%;background:var(--accent);"></span></span></td>
-              <td><span class="finding-tag">score_correct</span><span class="finding-tag">snp_valid</span><span class="finding-tag">repro_functional</span></td>
-              <td><span class="pill-status status-clear">Clear</span></td>
-            </tr>
-            <tr>
-              <td><a class="skill-link" href="https://github.com/ClawBio/ClawBio/tree/main/skills/claw-metagenomics" target="_blank">claw-metagenomics</a></td>
-              <td>7 / 7</td>
-              <td><div class="rate-cell" style="color:var(--accent);">100.0%</div><span class="rate-bar-wrap"><span class="rate-bar" style="width:100%;background:var(--accent);"></span></span></td>
-              <td>none</td>
+              <td><div class="rate-cell" style="color:var(--accent);">100.0%</div><span class="rate-bar-wrap"><span class="rate-bar" style="width:100.0%;background:var(--accent);"></span></span></td>
+              <td><span class="finding-tag">none</span></td>
               <td><span class="pill-status status-clear">Clear</span></td>
             </tr>
             <tr>
@@ -194,44 +199,45 @@
               <td><a class="skill-link" href="https://github.com/ClawBio/ClawBio/tree/main/skills/pharmgx-reporter" target="_blank">pharmgx-reporter</a></td>
               <td>43 / 44</td>
               <td><div class="rate-cell" style="color:var(--accent);">97.7%</div><span class="rate-bar-wrap"><span class="rate-bar" style="width:97.7%;background:var(--accent);"></span></span></td>
-              <td><span class="finding-tag">disclosure_failure</span></td>
+              <td><span class="finding-tag">incorrect_indeterminate</span></td>
+              <td><span class="pill-status status-clear">Clear</span></td>
+            </tr>
+            <tr>
+              <td><a class="skill-link" href="https://github.com/ClawBio/ClawBio/tree/main/skills/fine-mapping" target="_blank">fine-mapping</a></td>
+              <td>19 / 20</td>
+              <td><div class="rate-cell" style="color:var(--accent);">95.0%</div><span class="rate-bar-wrap"><span class="rate-bar" style="width:95.0%;background:var(--accent);"></span></span></td>
+              <td><span class="finding-tag">susie_inf_est_tausq_ignored</span></td>
               <td><span class="pill-status status-clear">Clear</span></td>
             </tr>
             <tr>
               <td><a class="skill-link" href="https://github.com/ClawBio/ClawBio/tree/main/skills/clinical-variant-reporter" target="_blank">clinical-variant-reporter</a></td>
               <td>4 / 5</td>
-              <td><div class="rate-cell" style="color:var(--accent);">80.0%</div><span class="rate-bar-wrap"><span class="rate-bar" style="width:80%;background:var(--accent);"></span></span></td>
+              <td><div class="rate-cell" style="color:var(--accent);">80.0%</div><span class="rate-bar-wrap"><span class="rate-bar" style="width:80.0%;background:var(--accent);"></span></span></td>
               <td><span class="finding-tag">gene_disease_context_missing</span></td>
               <td><span class="pill-status status-clear">Clear</span></td>
             </tr>
             <tr>
-              <td><a class="skill-link" href="https://github.com/ClawBio/ClawBio/tree/main/skills/cvr-acmg-correctness" target="_blank">cvr-acmg-correctness</a></td>
+              <td><a class="skill-link" href="https://github.com/ClawBio/ClawBio/tree/main/skills/clinical-variant-reporter" target="_blank">cvr-acmg-correctness</a></td>
               <td>9 / 13</td>
               <td><div class="rate-cell" style="color:var(--warn);">69.2%</div><span class="rate-bar-wrap"><span class="rate-bar" style="width:69.2%;background:var(--warn);"></span></span></td>
-              <td><span class="finding-tag">criteria_not_machine_parseable</span></td>
+              <td><span class="finding-tag">none</span></td>
               <td><span class="pill-status status-watch">Watch</span></td>
             </tr>
             <tr>
               <td><a class="skill-link" href="https://github.com/ClawBio/ClawBio/tree/main/skills/gwas-prs" target="_blank">gwas-prs</a></td>
               <td>5 / 8</td>
               <td><div class="rate-cell" style="color:var(--warn);">62.5%</div><span class="rate-bar-wrap"><span class="rate-bar" style="width:62.5%;background:var(--warn);"></span></span></td>
-              <td><span class="finding-tag">missing_output</span></td>
+              <td><span class="finding-tag">missing_output (3)</span></td>
               <td><span class="pill-status status-watch">Watch</span></td>
             </tr>
             <tr>
-              <td><a class="skill-link" href="https://github.com/ClawBio/ClawBio/tree/main/skills/cvr-variant-identity" target="_blank">cvr-variant-identity</a></td>
+              <td><a class="skill-link" href="https://github.com/ClawBio/ClawBio/tree/main/skills/clinical-variant-reporter" target="_blank">cvr-variant-identity</a></td>
               <td>3 / 6</td>
-              <td><div class="rate-cell" style="color:var(--warn);">50.0%</div><span class="rate-bar-wrap"><span class="rate-bar" style="width:50%;background:var(--warn);"></span></span></td>
-              <td><span class="finding-tag">transcript_selection_error</span></td>
-              <td><span class="pill-status status-p1">P1</span></td>
+              <td><div class="rate-cell" style="color:var(--warn);">50.0%</div><span class="rate-bar-wrap"><span class="rate-bar" style="width:50.0%;background:var(--warn);"></span></span></td>
+              <td><span class="finding-tag">transcript_selection_error (3)</span></td>
+              <td><span class="pill-status status-watch">Watch</span></td>
             </tr>
-            <tr>
-              <td><a class="skill-link" href="https://github.com/ClawBio/ClawBio/tree/main/skills/clawbio-finemapping" target="_blank">clawbio-finemapping</a></td>
-              <td>0 / 0</td>
-              <td><div class="rate-cell" style="color:var(--text-muted);">infra</div><span class="rate-bar-wrap"><span class="rate-bar" style="width:0%;"></span></span></td>
-              <td><span class="finding-tag">harness_error</span> (21)</td>
-              <td><span class="pill-status status-p0">Infra</span></td>
-            </tr>
+        <!-- BENCH_TABLE_END -->
           </tbody>
         </table>
       </div>
@@ -280,27 +286,31 @@
   </section>
 
   <footer>
-    <p>Last benchmark run: 2026-05-03 against commit <a href="https://github.com/ClawBio/ClawBio/commit/925b89a" target="_blank"><code>925b89a</code></a>. Original audit baseline 2026-04-05 at commit <a href="https://github.com/ClawBio/ClawBio/commit/1481fb4" target="_blank"><code>1481fb4</code></a>: 80 / 140 (57.1%).</p>
+    <!-- BENCH_FOOTER_START -->
+    <p>Last benchmark run: 2026-05-03 against commit <a href="https://github.com/ClawBio/ClawBio/commit/7820473" target="_blank"><code>7820473</code></a>. Original audit baseline 2026-04-05 at commit <a href="https://github.com/ClawBio/ClawBio/commit/1481fb4" target="_blank"><code>1481fb4</code></a>: 80 / 140 (57.1%).</p>
     <p style="margin-top:0.5rem;">ClawBio is open source under the <a href="https://github.com/ClawBio/ClawBio/blob/main/LICENSE" target="_blank">MIT License</a>.</p>
+        <!-- BENCH_FOOTER_END -->
   </footer>
 
   <script type="application/ld+json">
-  {
-    "@context": "https://schema.org",
-    "@type": "Dataset",
-    "name": "ClawBio Benchmark Leaderboard",
-    "description": "Public scientific-correctness leaderboard for ClawBio bioinformatics skills, audited by an independent third-party benchmark suite.",
-    "url": "https://clawbio.ai/benchmarks.html",
-    "creator": {
-      "@type": "Organization",
-      "name": "ClawBio",
-      "url": "https://clawbio.ai"
-    },
-    "license": "https://opensource.org/licenses/MIT",
-    "isAccessibleForFree": true,
-    "dateModified": "2026-05-03",
-    "keywords": "bioinformatics, benchmark, scientific-correctness, AI-agents, genomics, equity-scorer, fine-mapping, pharmgx, nutrigx, clawbio_bench"
-  }
+<!-- BENCH_JSONLD_START -->
+{
+  "@context": "https://schema.org",
+  "@type": "Dataset",
+  "name": "ClawBio Benchmark Leaderboard",
+  "description": "Public scientific-correctness leaderboard for ClawBio bioinformatics skills, audited by an independent third-party benchmark suite.",
+  "url": "https://clawbio.ai/benchmarks.html",
+  "creator": {
+    "@type": "Organization",
+    "name": "ClawBio",
+    "url": "https://clawbio.ai"
+  },
+  "license": "https://opensource.org/licenses/MIT",
+  "isAccessibleForFree": true,
+  "dateModified": "2026-05-03",
+  "keywords": "bioinformatics, benchmark, scientific-correctness, AI-agents, genomics, equity-scorer, fine-mapping, pharmgx, nutrigx, clawbio_bench"
+}
+        <!-- BENCH_JSONLD_END -->
   </script>
 </body>
 </html>
